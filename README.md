@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="ICON.png">
-    <img src="ICON.png" width="227" height="227" alt="CalabiyauUID">
+    <img src="ICON.png" width="162" height="162" alt="CalabiyauUID">
   </a>
 </p>
 <h1 align="center">Calabiyau 0.1.0</h1>
