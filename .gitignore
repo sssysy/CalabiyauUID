@@ -1,0 +1,11 @@
+*.py[codz]
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pdm-python
+test/
+tests/
+docs/
+.agents/
+AGENTS.md

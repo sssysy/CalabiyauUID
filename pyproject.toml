@@ -1,0 +1,14 @@
+[project]
+name = "CalabiyauUID"
+version = "0.1.0"
+description = "全功能卡拉彼丘插件"
+authors = [
+    {name = "sssysy", email = "sssysy@vip.qq.com"},
+]
+requires-python = ">=3.12"
+readme = "README.md"
+license = {file = "LICENSE"}
+
+
+[tool.pdm]
+distribution = false
