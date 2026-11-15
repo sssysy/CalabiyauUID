@@ -1,5 +1,6 @@
 """Dakanu 公开读取接口。"""
 
+import time
 import asyncio
 from typing import TypedDict
 
@@ -329,6 +330,11 @@ def tier_image_url(tier_index: int) -> str:
     return f"{BASE_URL}/tiers/tier-{tier_index}.png" if tier_index > 0 else ""
 
 
+def challenge_tier_image_url(tier_index: int) -> str:
+    """按挑战赛段位编号返回站点图标地址。"""
+    return f"{BASE_URL}/challenge-rank/tier-{tier_index}.png" if 1 <= tier_index <= 9 else ""
+
+
 class DakanuError(Exception):
     """Dakanu 请求失败，message 可直接向用户说明原因。"""
 
@@ -582,9 +588,9 @@ class DakanuRankingEntry(TypedDict):
     avatarId: int
     level: int
     borderId: int
-    segment: int
-    wins: int
-    totalGames: int
+    segment: int | None
+    wins: int | None
+    totalGames: int | None
     roles: list[int]
     score: int
     previousScore: int | None
@@ -604,9 +610,9 @@ class DakanuRankingsBoard(TypedDict):
     end: int
     total: int
     day: str
-    compareDay: str
+    compareDay: str | None
     updatedAt: int
-    cachedAt: int
+    cachedAt: int | None
     entries: list[DakanuRankingEntry]
 
 
@@ -637,6 +643,36 @@ class DakanuCurrentSeason(TypedDict):
     ranked_season: DakanuRankedSeason
 
 
+class DakanuRolesRankingEntry(TypedDict):
+    roleId: int
+    games: int
+    wins: int
+    winRate: float
+    appearanceRate: float
+    players: int
+    pickRate: float
+    previousWinRate: float | None
+    winRateDelta: float | None
+    previousAppearanceRate: float | None
+    appearanceRateDelta: float | None
+
+
+class DakanuRolesRankingBoard(TypedDict):
+    ok: bool
+    scope: str
+    rankedOnly: bool
+    minGames: int
+    day: str
+    compareDay: str | None
+    updatedAt: int
+    coveredMatches: int
+    entries: list[DakanuRolesRankingEntry]
+
+
+_META_CACHE_TTL_SECONDS = 300.0
+_meta_roles_cache: tuple[float, dict[int, str]] | None = None
+
+
 def _as_int(value: object) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
@@ -646,6 +682,12 @@ def _as_int(value: object) -> int | None:
 def _as_str(value: object) -> str | None:
     if isinstance(value, str):
         return value
+    return None
+
+
+def _as_float(value: object) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
     return None
 
 
@@ -659,6 +701,12 @@ def _opt_str(mapping: dict[object, object], key: str) -> str | None:
     if key not in mapping:
         return None
     return _as_str(mapping[key])
+
+
+def _opt_float(mapping: dict[object, object], key: str) -> float | None:
+    if key not in mapping:
+        return None
+    return _as_float(mapping[key])
 
 
 def _parse_ranking_entry(raw: object) -> DakanuRankingEntry | None:
@@ -682,9 +730,6 @@ def _parse_ranking_entry(raw: object) -> DakanuRankingEntry | None:
         or avatar_id is None
         or level is None
         or border_id is None
-        or segment is None
-        or wins is None
-        or total_games is None
         or score is None
         or not isinstance(raw_roles, list)
     ):
@@ -744,9 +789,7 @@ def _parse_rankings_board(payload: object) -> DakanuRankingsBoard | None:
         or end is None
         or total is None
         or day is None
-        or compare_day is None
         or updated_at is None
-        or cached_at is None
     ):
         return None
     entries: list[DakanuRankingEntry] = []
@@ -771,25 +814,33 @@ def _parse_rankings_board(payload: object) -> DakanuRankingsBoard | None:
 
 
 @to_thread
-def _fetch_rankings_sync(rank_type: int, page: int, page_size: int) -> DakanuRankingsBoard:
+def _fetch_rankings_sync(
+    rank_type: int,
+    page: int,
+    page_size: int,
+    sub_type: int | None,
+) -> DakanuRankingsBoard:
+    params: dict[str, int] = {"type": rank_type, "page": page, "page_size": page_size}
+    if sub_type is not None:
+        params["sub_type"] = sub_type
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(
                 f"{BASE_URL}/api/rankings",
-                params={"type": rank_type, "page": page, "page_size": page_size},
+                params=params,
             )
     except httpx.HTTPError as exc:
         logger.warning(f"[卡拉彼丘·排位排行] 请求榜单接口失败：{exc}")
-        raise DakanuError("请求排位榜单失败，请稍后再试。") from None
+        raise DakanuError("请求榜单失败，请稍后再试。") from None
     if response.status_code in {204, 404}:
-        raise DakanuError("暂无排位榜单数据，请稍后再试。")
+        raise DakanuError("暂无榜单数据，请稍后再试。")
     if response.status_code == 429:
         raise DakanuError("查询过于频繁，请稍后再试。")
     if response.status_code in {502, 503, 504}:
         raise DakanuError("战绩站暂时无法读取榜单数据，请稍后再试。")
     if response.status_code != 200:
         logger.warning(f"[卡拉彼丘·排位排行] 读取榜单返回 HTTP {response.status_code}")
-        raise DakanuError("读取排位榜单失败，请稍后再试。")
+        raise DakanuError("读取榜单失败，请稍后再试。")
     try:
         payload: object = response.json()
     except ValueError:
@@ -802,9 +853,15 @@ def _fetch_rankings_sync(rank_type: int, page: int, page_size: int) -> DakanuRan
     return board
 
 
-async def fetch_rankings(rank_type: int = 1, page: int = 1, page_size: int = 50) -> DakanuRankingsBoard:
+async def fetch_rankings(
+    rank_type: int = 1,
+    page: int = 1,
+    page_size: int = 50,
+    *,
+    sub_type: int | None = None,
+) -> DakanuRankingsBoard:
     """读取 Dakanu 在线排行榜数据。"""
-    return await _fetch_rankings_sync(rank_type, page, page_size)
+    return await _fetch_rankings_sync(rank_type, page, page_size, sub_type)
 
 
 def _parse_ranking_floor(payload: object) -> DakanuRankingFloor | None:
@@ -906,3 +963,156 @@ def _fetch_current_season_sync() -> DakanuCurrentSeason | None:
 async def fetch_current_season() -> DakanuCurrentSeason | None:
     """读取当前排位赛季信息；接口异常时返回 None。"""
     return await _fetch_current_season_sync()
+
+
+def _parse_roles_ranking_entry(raw: object) -> DakanuRolesRankingEntry | None:
+    if not isinstance(raw, dict):
+        return None
+    role_id = _opt_int(raw, "roleId")
+    games = _opt_int(raw, "games")
+    wins = _opt_int(raw, "wins")
+    win_rate = _opt_float(raw, "winRate")
+    appearance_rate = _opt_float(raw, "appearanceRate")
+    players = _opt_int(raw, "players")
+    pick_rate = _opt_float(raw, "pickRate")
+    if (
+        role_id is None
+        or games is None
+        or wins is None
+        or win_rate is None
+        or appearance_rate is None
+        or players is None
+        or pick_rate is None
+    ):
+        return None
+    return {
+        "roleId": role_id,
+        "games": games,
+        "wins": wins,
+        "winRate": win_rate,
+        "appearanceRate": appearance_rate,
+        "players": players,
+        "pickRate": pick_rate,
+        "previousWinRate": _opt_float(raw, "previousWinRate"),
+        "winRateDelta": _opt_float(raw, "winRateDelta"),
+        "previousAppearanceRate": _opt_float(raw, "previousAppearanceRate"),
+        "appearanceRateDelta": _opt_float(raw, "appearanceRateDelta"),
+    }
+
+
+def _parse_roles_ranking_board(payload: object) -> DakanuRolesRankingBoard | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    raw_entries = payload["entries"] if "entries" in payload else None
+    if not isinstance(raw_entries, list):
+        return None
+    scope = _opt_str(payload, "scope")
+    ranked_only = payload["rankedOnly"] if "rankedOnly" in payload else None
+    min_games = _opt_int(payload, "minGames")
+    day = _opt_str(payload, "day")
+    compare_day = _opt_str(payload, "compareDay")
+    updated_at = _opt_int(payload, "updatedAt")
+    covered_matches = _opt_int(payload, "coveredMatches")
+    if (
+        scope is None
+        or not isinstance(ranked_only, bool)
+        or min_games is None
+        or day is None
+        or updated_at is None
+        or covered_matches is None
+    ):
+        return None
+    entries: list[DakanuRolesRankingEntry] = []
+    for item in raw_entries:
+        entry = _parse_roles_ranking_entry(item)
+        if entry is not None:
+            entries.append(entry)
+    return {
+        "ok": True,
+        "scope": scope,
+        "rankedOnly": ranked_only,
+        "minGames": min_games,
+        "day": day,
+        "compareDay": compare_day,
+        "updatedAt": updated_at,
+        "coveredMatches": covered_matches,
+        "entries": entries,
+    }
+
+
+@to_thread
+def _fetch_roles_ranking_sync(ranked_only: bool, min_games: int) -> DakanuRolesRankingBoard:
+    params: dict[str, int] = {"min_games": min_games}
+    if not ranked_only:
+        params["all"] = 1
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/roles/ranking", params=params)
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·超弦体排行] 请求角色榜单失败：{exc}")
+        raise DakanuError("请求超弦体排行失败，请稍后再试。") from None
+    if response.status_code in {204, 404}:
+        raise DakanuError("暂无超弦体排行数据，请稍后再试。")
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法读取超弦体排行，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·超弦体排行] 读取角色榜单返回 HTTP {response.status_code}")
+        raise DakanuError("读取超弦体排行失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·超弦体排行] 角色榜单返回非 JSON 响应")
+        raise DakanuError("超弦体排行数据格式异常，请稍后再试。") from None
+    board = _parse_roles_ranking_board(payload)
+    if board is None:
+        logger.warning("[卡拉彼丘·超弦体排行] 角色榜单响应结构异常")
+        raise DakanuError("超弦体排行数据格式异常，请稍后再试。")
+    return board
+
+
+async def fetch_roles_ranking(*, ranked_only: bool = True, min_games: int = 3) -> DakanuRolesRankingBoard:
+    """读取 Dakanu 超弦体胜率与登场率排行榜。"""
+    return await _fetch_roles_ranking_sync(ranked_only, min_games)
+
+
+@to_thread
+def _fetch_meta_roles_sync() -> dict[int, str]:
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/meta")
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·角色字典] 请求 /api/meta 失败：{exc}")
+        raise DakanuError("读取角色列表失败，请稍后再试。") from None
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·角色字典] 读取 /api/meta 返回 HTTP {response.status_code}")
+        raise DakanuError("读取角色列表失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·角色字典] /api/meta 返回非 JSON 响应")
+        raise DakanuError("角色列表格式异常，请稍后再试。") from None
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        raise DakanuError("角色列表格式异常，请稍后再试。")
+    raw_roles = payload["roles"] if "roles" in payload else None
+    if not isinstance(raw_roles, dict):
+        raise DakanuError("角色列表格式异常，请稍后再试。")
+    roles: dict[int, str] = {}
+    for key, value in raw_roles.items():
+        if isinstance(key, str) and key.isdigit() and isinstance(value, str) and value.strip():
+            role_id = int(key)
+            if role_id != 220:
+                roles[role_id] = value.strip()
+    return roles
+
+
+async def fetch_meta_roles() -> dict[int, str]:
+    """读取 Dakanu 角色 ID 到中文名映射，带 5 分钟内存缓存。"""
+    global _meta_roles_cache
+    now = time.monotonic()
+    if _meta_roles_cache is not None and now < _meta_roles_cache[0]:
+        return dict(_meta_roles_cache[1])
+    roles = await _fetch_meta_roles_sync()
+    _meta_roles_cache = (time.monotonic() + _META_CACHE_TTL_SECONDS, roles)
+    return dict(roles)

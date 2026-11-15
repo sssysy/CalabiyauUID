@@ -176,11 +176,31 @@ def challenge_tier_index(segment: int) -> int:
 
 
 def _challenge_label(segment: int) -> tuple[str, str]:
-    names = ("青铜", "白银", "黄金", "铂金", "翡翠", "钻石", "大师", "王者", "传说")
+    label, color, _ = challenge_tier_display(segment)
+    return label, color
+
+
+def challenge_tier_display(segment: int) -> tuple[str, str, int]:
+    """返回挑战赛段位名、主题色与图标编号；范围外返回空串与 0。"""
+    tiers = (
+        ("青铜", "#b97859", ("V", "IV", "III", "II", "I")),
+        ("白银", "#b8bcc4", ("V", "IV", "III", "II", "I")),
+        ("黄金", "#d5ab50", ("V", "IV", "III", "II", "I")),
+        ("铂金", "#e2ddd7", ("V", "IV", "III", "II", "I")),
+        ("翡翠", "#59a968", ("V", "IV", "III", "II", "I")),
+        ("钻石", "#68b5dc", ("V", "IV", "III", "II", "I")),
+        ("大师", "#a35ed3", ("V", "IV", "III", "II", "I")),
+        ("传奇", "#d65358", ("V", "IV", "III", "II", "I")),
+        ("王者", "#d7b15c", ()),
+    )
     if segment < 1 or segment > 41:
-        return "", ""
-    tier_index = min(8, (segment - 1) // 5)
-    return names[tier_index], "#8f98a8"
+        return "", "", 0
+    tier_idx = min(9, ((segment - 1) // 5) + 1)
+    name, color, divisions = tiers[tier_idx - 1]
+    if not divisions:
+        return name, color, tier_idx
+    div_idx = (segment - 1) % 5
+    return f"{name} {divisions[div_idx]}", color, tier_idx
 
 
 def _pct(value: float) -> str:

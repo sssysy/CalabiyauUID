@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ data.title }}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background: #eceff4;
+}
+.card {
+  width: 100%;
+  background: #fff;
+  border: 1px solid rgba(22, 26, 33, .09);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  background: #fff;
+}
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .88);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.head-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f3f5f8;
+  border: 1px solid rgba(22, 26, 33, .08);
+  font-size: 12px;
+  color: rgba(0, 0, 0, .55);
+}
+.head-pill strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .88);
+  font-family: "Mono", Consolas, monospace;
+}
+.head-pill .scope-ranked {
+  color: #d96b27;
+}
+.head-pill .scope-all {
+  color: #2563eb;
+}
+.table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.tr {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 9px 18px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  font-size: 13px;
+  background: #fff;
+}
+.tr.head {
+  background: #eef0f3;
+  color: rgba(0, 0, 0, .50);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 18px;
+}
+.tr:last-child {
+  border-bottom: none;
+}
+.tr.is-top1 {
+  background: linear-gradient(90deg, rgba(212, 160, 36, .11) 0%, #fffdf8 55%, #fff 100%);
+}
+.tr.is-top2 {
+  background: linear-gradient(90deg, rgba(140, 154, 176, .10) 0%, #fafbfc 55%, #fff 100%);
+}
+.tr.is-top3 {
+  background: linear-gradient(90deg, rgba(192, 122, 82, .09) 0%, #fdfaf8 55%, #fff 100%);
+}
+.td {
+  min-width: 0;
+}
+.col-pos {
+  width: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Mono", Consolas, monospace;
+}
+.rank-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .54);
+}
+.rank-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+}
+.tr.is-top1 .rank-badge {
+  background: #d4a024;
+}
+.tr.is-top2 .rank-badge {
+  background: #8c9ab0;
+}
+.tr.is-top3 .rank-badge {
+  background: #c07a52;
+}
+.col-role {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.role-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(22, 26, 33, .12);
+  background: #eef2f7;
+}
+.role-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.role-avatar-fallback {
+  font-size: 16px;
+  font-weight: 700;
+  color: #5b6c84;
+}
+.role-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.role-name {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(0, 0, 0, .88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.role-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: rgba(0, 0, 0, .52);
+  white-space: nowrap;
+}
+.faction-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+.faction-name {
+  font-weight: 600;
+}
+.col-rate {
+  width: 150px;
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 7px;
+  white-space: nowrap;
+}
+.col-rate-head {
+  justify-content: flex-end;
+  padding-right: 65px;
+}
+.is-active-col {
+  color: #c96d28;
+  font-weight: 700;
+}
+.rate-val {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: rgba(0, 0, 0, .82);
+  font-family: "Mono", Consolas, monospace;
+}
+.rate-val.is-active {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #c96d28;
+}
+.rate-delta {
+  width: 58px;
+  flex: none;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: "Mono", Consolas, monospace;
+}
+.delta--up {
+  color: #17a34a;
+}
+.delta--down {
+  color: #e2453c;
+}
+.col-num {
+  width: 88px;
+  flex: none;
+  text-align: right;
+  font-family: "Mono", Consolas, monospace;
+  font-size: 13px;
+  font-weight: 550;
+  color: rgba(0, 0, 0, .74);
+  white-space: nowrap;
+}
+.tr.head .col-num {
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, .50);
+}
+.empty-board {
+  padding: 48px 20px;
+  text-align: center;
+  color: rgba(0, 0, 0, .48);
+  font-size: 14px;
+}
+.footer {
+  text-align: center;
+  padding-top: 12px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, .42);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">{{ data.title }}</div>
+      <div class="head-actions">
+        <div class="head-pill">
+          <span>统计范围</span>
+          <strong class="{{ data.scope_class }}">{{ data.scope_label }}</strong>
+        </div>
+        <div class="head-pill">
+          <span>统计对局</span>
+          <strong>{{ data.covered_matches_text }}</strong>
+        </div>
+        {% if data.day_text %}
+        <div class="head-pill">
+          <span>更新日期</span>
+          <strong>{{ data.day_text }}</strong>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% if data.has_entries %}
+    <div class="table">
+      <div class="tr head">
+        <div class="td col-pos">#</div>
+        <div class="td col-role">超弦体</div>
+        <div class="td col-rate col-rate-head{% if data.sort_by == 'appearanceRate' %} is-active-col{% endif %}">登场率</div>
+        <div class="td col-rate col-rate-head{% if data.sort_by == 'winRate' %} is-active-col{% endif %}">胜率</div>
+        <div class="td col-num">场次</div>
+        <div class="td col-num">胜场</div>
+        <div class="td col-num">统计玩家</div>
+      </div>
+      {% for row in data.rows %}
+      <div class="tr{% if row.rank_class %} {{ row.rank_class }}{% endif %}">
+        <div class="td col-pos">
+          {% if row.rank_class %}
+          <span class="rank-badge">#{{ row.position }}</span>
+          {% else %}
+          <span class="rank-num">#{{ row.position }}</span>
+          {% endif %}
+        </div>
+        <div class="td col-role">
+          <div class="role-avatar">
+            {% if row.portrait %}
+            <img src="{{ row.portrait }}" alt="">
+            {% else %}
+            <span class="role-avatar-fallback">{{ row.initial }}</span>
+            {% endif %}
+          </div>
+          <div class="role-info">
+            <div class="role-name">{{ row.name }}</div>
+            {% if row.has_meta_tag %}
+            <div class="role-tag">
+              {% if row.faction_name %}
+              <span class="faction-dot" style="background: {{ row.faction_dot_color }}"></span>
+              <span class="faction-name" style="color: {{ row.faction_text_color }}">{{ row.faction_name }}</span>
+              {% endif %}
+              {% if row.faction_name and row.position_name %}
+              <span>·</span>
+              {% endif %}
+              {% if row.position_name %}
+              <span>{{ row.position_name }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="td col-rate">
+          <span class="rate-val{% if data.sort_by == 'appearanceRate' %} is-active{% endif %}">{{ row.appearance_rate_text }}</span>
+          <span class="rate-delta{% if row.appearance_delta_class %} {{ row.appearance_delta_class }}{% endif %}">{{ row.appearance_delta_text }}</span>
+        </div>
+        <div class="td col-rate">
+          <span class="rate-val{% if data.sort_by == 'winRate' %} is-active{% endif %}">{{ row.win_rate_text }}</span>
+          <span class="rate-delta{% if row.win_delta_class %} {{ row.win_delta_class }}{% endif %}">{{ row.win_delta_text }}</span>
+        </div>
+        <div class="td col-num">{{ row.games_text }}</div>
+        <div class="td col-num">{{ row.wins_text }}</div>
+        <div class="td col-num">{{ row.players_text }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-board">暂无超弦体排行数据</div>
+    {% endif %}
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

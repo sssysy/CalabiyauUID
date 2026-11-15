@@ -212,6 +212,12 @@ body {
 .podium-card.is-first .podium-score {
   font-size: 30px;
 }
+.podium-score.is-long {
+  font-size: 20px;
+}
+.podium-card.is-first .podium-score.is-long {
+  font-size: 22px;
+}
 .podium-score-label {
   margin-top: 2px;
   font-size: 11px;
@@ -349,19 +355,21 @@ body {
   object-fit: contain;
 }
 .col-score {
-  width: 72px;
+  width: 112px;
   flex: none;
   text-align: right;
   font-weight: 700;
   color: rgba(0, 0, 0, .86);
   font-family: "Mono", Consolas, monospace;
+  white-space: nowrap;
 }
 .col-delta {
-  width: 66px;
+  width: 96px;
   flex: none;
   text-align: right;
   font-weight: 700;
   font-family: "Mono", Consolas, monospace;
+  white-space: nowrap;
 }
 .delta {
   font-size: 12px;
@@ -392,8 +400,21 @@ body {
   justify-content: flex-end;
   gap: 8px;
 }
+.col-record.is-compact {
+  width: 92px;
+}
 .col-record-head {
   justify-content: flex-start;
+}
+.col-record-head.is-compact {
+  justify-content: flex-end;
+}
+.record-wins-only {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: rgba(0, 0, 0, .72);
+  font-family: "Mono", Consolas, monospace;
+  white-space: nowrap;
 }
 .record-bar {
   width: 136px;
@@ -492,13 +513,15 @@ body {
           {% endif %}
         </div>
         <div class="podium-name">{{ entry.nickname }}</div>
+        {% if entry.tier_label %}
         <div class="podium-tier" style="color: {{ entry.tier_color }}">
           {% if entry.tier_uri %}<img class="podium-tier-icon" src="{{ entry.tier_uri }}" alt="">{% endif %}
           <span>{{ entry.tier_label }}</span>
         </div>
+        {% endif %}
         <div class="podium-meta">{{ entry.meta_text }}</div>
-        <div class="podium-score">{{ entry.score }}</div>
-        <div class="podium-score-label">段位分</div>
+        <div class="podium-score{% if entry.is_long_score %} is-long{% endif %}">{{ entry.score }}</div>
+        <div class="podium-score-label">{{ data.metric_label }}</div>
         {% if entry.roles %}
         <div class="podium-roles">
           {% for role_uri in entry.roles %}
@@ -514,11 +537,13 @@ body {
         <div class="td col-pos">排名</div>
         <div class="td col-player">玩家</div>
         <div class="td col-region">地区</div>
+        {% if data.show_tier %}
         <div class="td col-tier">段位</div>
-        <div class="td col-score">段位分</div>
+        {% endif %}
+        <div class="td col-score">{{ data.metric_label }}</div>
         <div class="td col-delta">较昨日</div>
         <div class="td col-roles">常用角色</div>
-        <div class="td col-record col-record-head">胜率</div>
+        <div class="td col-record col-record-head{% if data.compact_record %} is-compact{% endif %}">{{ data.record_header }}</div>
       </div>
       {% for row in data.rows %}
       <div class="tr">
@@ -537,10 +562,12 @@ body {
           </div>
         </div>
         <div class="td col-region">{{ row.region_text }}</div>
+        {% if data.show_tier %}
         <div class="td col-tier" style="color: {{ row.tier_color }}">
           {% if row.tier_uri %}<img class="row-tier-icon" src="{{ row.tier_uri }}" alt="">{% endif %}
           <span>{{ row.tier_label }}</span>
         </div>
+        {% endif %}
         <div class="td col-score">{{ row.score }}</div>
         <div class="td col-delta"><span class="delta {{ row.delta_class }}">{{ row.delta_text }}</span></div>
         <div class="td col-roles">
@@ -552,7 +579,8 @@ body {
           <span class="delta--flat">—</span>
           {% endif %}
         </div>
-        <div class="td col-record">
+        <div class="td col-record{% if data.compact_record %} is-compact{% endif %}">
+          {% if row.has_record_bar %}
           <div class="record-bar">
             {% if row.has_games %}
               {% if row.win_width_pct is not none %}
@@ -566,6 +594,9 @@ body {
             {% endif %}
           </div>
           <div class="record-rate">{{ row.win_rate_text }}</div>
+          {% else %}
+          <div class="record-wins-only">{{ row.wins_only_text }}</div>
+          {% endif %}
         </div>
       </div>
       {% endfor %}

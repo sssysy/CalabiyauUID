@@ -6,6 +6,9 @@ authors = [
     {name = "sssysy", email = "sssysy@vip.qq.com"},
 ]
 requires-python = ">=3.12"
+dependencies = [
+    "pypinyin>=0.50.0",
+]
 readme = "README.md"
 license = {file = "LICENSE"}
 
