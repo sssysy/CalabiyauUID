@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>战绩总览</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+}
+.empty-card {
+  width: 100%;
+  padding: 42px 32px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #e8edf4 100%);
+  text-align: center;
+}
+.empty-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #263247;
+}
+.empty-text {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #7c8799;
+  white-space: pre-wrap;
+}
+.footer {
+  margin-top: 24px;
+  text-align: center;
+  color: #929cac;
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div class="empty-card">
+  <div class="empty-title">还没有战绩数据</div>
+  <div class="empty-text">{{ data.message }}</div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

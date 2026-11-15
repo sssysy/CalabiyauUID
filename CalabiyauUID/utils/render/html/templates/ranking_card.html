@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ data.title }}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background: #eceff4;
+}
+.card {
+  width: 100%;
+  background: #fff;
+  border: 1px solid rgba(22, 26, 33, .09);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  background: #fff;
+}
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .88);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.head-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f3f5f8;
+  border: 1px solid rgba(22, 26, 33, .08);
+  font-size: 12px;
+  color: rgba(0, 0, 0, .55);
+}
+.head-pill strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .88);
+  font-family: "Mono", Consolas, monospace;
+}
+.head-pill .season-val {
+  color: #d96b27;
+}
+.pill-delta {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "Mono", Consolas, monospace;
+}
+.pill-delta--up {
+  color: #17a34a;
+}
+.pill-delta--down {
+  color: #e2453c;
+}
+.pill-delta--flat {
+  color: rgba(0, 0, 0, .42);
+}
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 24px 20px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  background: linear-gradient(180deg, #fafbfd 0%, #fff 100%);
+}
+.podium-card {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 14px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(22, 26, 33, .10);
+  background: #f7f8fa;
+  text-align: center;
+}
+.podium-card.is-first {
+  padding: 24px 16px 18px;
+  border-color: rgba(212, 160, 36, .45);
+  background: linear-gradient(180deg, #fffaf0 0%, #fffdf8 100%);
+  box-shadow: 0 6px 18px rgba(212, 160, 36, .10);
+}
+.podium-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: -10px;
+  z-index: 2;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  font-family: "Mono", Consolas, monospace;
+}
+.podium-pos-1 .podium-badge {
+  background: #d4a024;
+}
+.podium-pos-2 .podium-badge {
+  background: #8c9ab0;
+}
+.podium-pos-3 .podium-badge {
+  background: #c07a52;
+}
+.podium-pos-other .podium-badge {
+  background: #6c7178;
+}
+.podium-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2.5px solid #cbd5e1;
+  background: #e5e7eb;
+}
+.podium-card.is-first .podium-avatar {
+  width: 72px;
+  height: 72px;
+  border-color: #d4a024;
+}
+.podium-pos-2 .podium-avatar {
+  border-color: #94a3b8;
+}
+.podium-pos-3 .podium-avatar {
+  border-color: #c07a52;
+}
+.podium-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.podium-avatar-fallback {
+  font-size: 22px;
+  font-weight: 700;
+  color: #5b6c84;
+}
+.podium-name {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.podium-card.is-first .podium-name {
+  font-size: 16px;
+}
+.podium-tier {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.podium-tier-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.podium-meta {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: rgba(0, 0, 0, .48);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.podium-score {
+  margin-top: 10px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #c96d28;
+  font-family: "Mono", Consolas, monospace;
+}
+.podium-card.is-first .podium-score {
+  font-size: 30px;
+}
+.podium-score-label {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, .44);
+}
+.podium-roles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.role-chip {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(22, 26, 33, .12);
+  background: #eef2f7;
+}
+.role-chip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.tr {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 16px;
+  gap: 10px;
+  border-bottom: 1px solid rgba(22, 26, 33, .09);
+  font-size: 13px;
+}
+.tr.head {
+  background: #eef0f3;
+  color: rgba(0, 0, 0, .48);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+}
+.tr:last-child {
+  border-bottom: none;
+}
+.td {
+  min-width: 0;
+}
+.col-pos {
+  width: 40px;
+  flex: none;
+  text-align: right;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .62);
+  font-family: "Mono", Consolas, monospace;
+}
+.col-player {
+  flex: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.row-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(22, 26, 33, .12);
+  background: #e5e7eb;
+}
+.row-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.row-avatar-fallback {
+  font-size: 14px;
+  font-weight: 700;
+  color: #5b6c84;
+}
+.player-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.player-nick {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: rgba(0, 0, 0, .86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-uid {
+  font-size: 11px;
+  color: rgba(0, 0, 0, .42);
+  font-family: "Mono", Consolas, monospace;
+}
+.col-region {
+  width: 98px;
+  flex: none;
+  font-size: 12px;
+  color: rgba(0, 0, 0, .60);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.col-tier {
+  width: 94px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.row-tier-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  object-fit: contain;
+}
+.col-score {
+  width: 72px;
+  flex: none;
+  text-align: right;
+  font-weight: 700;
+  color: rgba(0, 0, 0, .86);
+  font-family: "Mono", Consolas, monospace;
+}
+.col-delta {
+  width: 66px;
+  flex: none;
+  text-align: right;
+  font-weight: 700;
+  font-family: "Mono", Consolas, monospace;
+}
+.delta {
+  font-size: 12px;
+  font-weight: 700;
+}
+.delta--up {
+  color: #17a34a;
+}
+.delta--down {
+  color: #e2453c;
+}
+.delta--flat {
+  color: rgba(0, 0, 0, .38);
+  font-weight: 500;
+}
+.col-roles {
+  width: 96px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.col-record {
+  width: 190px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.col-record-head {
+  justify-content: flex-start;
+}
+.record-bar {
+  width: 136px;
+  height: 22px;
+  flex: none;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #eef0f3;
+}
+.record-win {
+  background: #4b8ef0;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.record-loss {
+  background: #e2453c;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.record-empty {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(0, 0, 0, .42);
+}
+.record-rate {
+  width: 42px;
+  flex: none;
+  text-align: right;
+  font-weight: 650;
+  color: rgba(0, 0, 0, .78);
+  font-family: "Mono", Consolas, monospace;
+}
+.empty-board {
+  padding: 48px 20px;
+  text-align: center;
+  color: rgba(0, 0, 0, .48);
+  font-size: 14px;
+}
+.footer {
+  text-align: center;
+  padding-top: 12px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, .42);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">{{ data.title }}</div>
+      <div class="head-actions">
+        {% if data.floor is not none %}
+        <div class="head-pill">
+          <span>当前奇点底分</span>
+          <strong>{{ data.floor.score }}</strong>
+          {% if data.floor.delta_text %}
+          <span class="pill-delta {{ data.floor.delta_class }}">{{ data.floor.delta_text }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if data.season_label %}
+        <div class="head-pill">
+          <span>当前赛季</span>
+          <strong class="season-val">{{ data.season_label }}</strong>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% if data.has_entries %}
+    <div class="podium">
+      {% for entry in data.podium %}
+      <div class="podium-card {{ entry.rank_class }}{% if entry.is_first %} is-first{% endif %}">
+        <div class="podium-badge">{{ entry.position }}</div>
+        <div class="podium-avatar">
+          {% if entry.avatar %}
+          <img src="{{ entry.avatar }}" alt="">
+          {% else %}
+          <span class="podium-avatar-fallback">{{ entry.initial }}</span>
+          {% endif %}
+        </div>
+        <div class="podium-name">{{ entry.nickname }}</div>
+        <div class="podium-tier" style="color: {{ entry.tier_color }}">
+          {% if entry.tier_uri %}<img class="podium-tier-icon" src="{{ entry.tier_uri }}" alt="">{% endif %}
+          <span>{{ entry.tier_label }}</span>
+        </div>
+        <div class="podium-meta">{{ entry.meta_text }}</div>
+        <div class="podium-score">{{ entry.score }}</div>
+        <div class="podium-score-label">段位分</div>
+        {% if entry.roles %}
+        <div class="podium-roles">
+          {% for role_uri in entry.roles %}
+          <span class="role-chip"><img src="{{ role_uri }}" alt=""></span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="table">
+      <div class="tr head">
+        <div class="td col-pos">排名</div>
+        <div class="td col-player">玩家</div>
+        <div class="td col-region">地区</div>
+        <div class="td col-tier">段位</div>
+        <div class="td col-score">段位分</div>
+        <div class="td col-delta">较昨日</div>
+        <div class="td col-roles">常用角色</div>
+        <div class="td col-record col-record-head">胜率</div>
+      </div>
+      {% for row in data.rows %}
+      <div class="tr">
+        <div class="td col-pos">{{ row.position }}</div>
+        <div class="td col-player">
+          <div class="row-avatar">
+            {% if row.avatar %}
+            <img src="{{ row.avatar }}" alt="">
+            {% else %}
+            <span class="row-avatar-fallback">{{ row.initial }}</span>
+            {% endif %}
+          </div>
+          <div class="player-text">
+            <div class="player-nick">{{ row.nickname }}</div>
+            <div class="player-uid">#{{ row.player_id }}</div>
+          </div>
+        </div>
+        <div class="td col-region">{{ row.region_text }}</div>
+        <div class="td col-tier" style="color: {{ row.tier_color }}">
+          {% if row.tier_uri %}<img class="row-tier-icon" src="{{ row.tier_uri }}" alt="">{% endif %}
+          <span>{{ row.tier_label }}</span>
+        </div>
+        <div class="td col-score">{{ row.score }}</div>
+        <div class="td col-delta"><span class="delta {{ row.delta_class }}">{{ row.delta_text }}</span></div>
+        <div class="td col-roles">
+          {% if row.roles %}
+            {% for role_uri in row.roles %}
+            <span class="role-chip"><img src="{{ role_uri }}" alt=""></span>
+            {% endfor %}
+          {% else %}
+          <span class="delta--flat">—</span>
+          {% endif %}
+        </div>
+        <div class="td col-record">
+          <div class="record-bar">
+            {% if row.has_games %}
+              {% if row.win_width_pct is not none %}
+              <div class="record-win" style="width: {{ row.win_width_pct }}%">{{ row.wins }}胜</div>
+              {% endif %}
+              {% if row.loss_width_pct is not none %}
+              <div class="record-loss" style="width: {{ row.loss_width_pct }}%">{{ row.losses }}负</div>
+              {% endif %}
+            {% else %}
+            <div class="record-empty">暂无对局</div>
+            {% endif %}
+          </div>
+          <div class="record-rate">{{ row.win_rate_text }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-board">暂无榜单数据</div>
+    {% endif %}
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

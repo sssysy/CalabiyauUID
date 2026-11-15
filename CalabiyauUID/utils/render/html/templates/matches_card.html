@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>历史战绩</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #e9edf2;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.card {
+  width: 100%;
+  padding: 24px;
+  background: linear-gradient(145deg, #f8fafc 0%, #e9eef4 100%);
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 20px;
+  border: 1px solid #dce3ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(22, 26, 33, .07);
+}
+.avatar {
+  display: flex;
+  width: 66px;
+  height: 66px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #dce3eb;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .16);
+}
+.avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-fallback {
+  font-size: 24px;
+  font-weight: 700;
+  color: #5b6c84;
+}
+.player-meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.player-name {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.player-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #68758a;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.clan {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e7edf4;
+  color: #45607a;
+  font-size: 11px;
+  font-weight: 600;
+}
+.title-block {
+  text-align: right;
+  flex: none;
+}
+.title {
+  font-size: 20px;
+  font-weight: 700;
+}
+.title-note {
+  margin-top: 3px;
+  color: #7c8799;
+  font-size: 11px;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 4px 9px;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.matches {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dce3ec;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f7f8fa;
+  box-shadow: 0 5px 18px rgba(22, 26, 33, .06);
+}
+.match {
+  display: flex;
+  border-bottom: 1px solid #e2e7ee;
+  background: #f7f8fa;
+}
+.match:last-child {
+  border-bottom: none;
+}
+.match-win .match-main {
+  background: #f3f7ff;
+}
+.match-lose .match-main {
+  background: #fff5f4;
+}
+.match-draw .match-main {
+  background: #fffaf0;
+}
+.match-bar {
+  width: 4px;
+  flex: none;
+  background: #4b8ef0;
+}
+.match-lose .match-bar {
+  background: #e2453c;
+}
+.match-draw .match-bar {
+  background: #b8862c;
+}
+.match-unknown .match-bar {
+  background: #9aa5b5;
+}
+.match-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.match-art {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center 30%;
+  background-repeat: no-repeat;
+}
+.match-veil {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, .58);
+}
+.match-win .match-veil {
+  background: rgba(243, 247, 255, .56);
+}
+.match-lose .match-veil {
+  background: rgba(255, 245, 244, .56);
+}
+.match-draw .match-veil {
+  background: rgba(255, 250, 240, .56);
+}
+.match-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px 7px;
+}
+.match-info {
+  display: flex;
+  width: 118px;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mode {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time, .duration {
+  font-size: 10.5px;
+  color: #68758a;
+}
+.result {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #2563eb;
+}
+.match-lose .result {
+  color: #c62828;
+}
+.match-draw .result {
+  color: #946200;
+}
+.match-unknown .result {
+  color: #6f7c8f;
+}
+.kda-wrap {
+  display: flex;
+  width: 196px;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.role-wrap {
+  position: relative;
+  display: flex;
+  width: 52px;
+  height: 56px;
+  flex: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+.role-art {
+  display: flex;
+  width: 50px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #edf2f8;
+}
+.role-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.role-empty {
+  width: 44px;
+  height: 44px;
+  border: 1px dashed #b4bfce;
+  border-radius: 50%;
+  background: transparent;
+}
+.badge {
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  padding: 0 5px;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+}
+.badge-mvp {
+  background: #b8862c;
+}
+.badge-svp {
+  background: #4b8ef0;
+}
+.kda-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.kda-line {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.kda-line i {
+  margin: 0 3px;
+  font-style: normal;
+  color: #8a96a7;
+}
+.kda-line .death {
+  color: #c62828;
+}
+.kda-ratio, .kda-extra {
+  font-size: 10.5px;
+  color: #68758a;
+  white-space: nowrap;
+}
+.score-box {
+  display: flex;
+  width: 112px;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.score-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.score-single, .score-self {
+  color: #3b4a5f;
+}
+.match-win .score-self {
+  color: #208a49;
+}
+.match-lose .score-self {
+  color: #c62828;
+}
+.score-op {
+  color: #3b4a5f;
+}
+.score-sep {
+  color: #53657a;
+  font-size: 12px;
+  font-weight: 600;
+}
+.score-label {
+  color: #3b4a5f;
+  font-size: 10px;
+  font-weight: 600;
+}
+.delta {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.delta.is-up {
+  color: #168343;
+}
+.delta.is-down {
+  color: #c62828;
+}
+.map-name {
+  max-width: 112px;
+  overflow: hidden;
+  color: #68758a;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roster {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-width: 0;
+  padding-left: 14px;
+  border-left: 1px solid #d8e0ea;
+}
+.roster-team {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.roster-player {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 17px;
+}
+.mini-avatar {
+  display: flex;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #dce3eb;
+  font-size: 8px;
+  font-weight: 700;
+  color: #53657a;
+}
+.mini-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.roster-name {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #68758a;
+}
+.is-target .roster-name {
+  color: #18784a;
+  font-weight: 700;
+}
+.roster.is-empty {
+  align-items: center;
+  justify-content: center;
+  color: #8a96a7;
+  font-size: 10.5px;
+}
+.match-footer {
+  position: relative;
+  padding: 0 16px 8px;
+  color: #8a96a7;
+  font-size: 9px;
+}
+.match-footer span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .62);
+  font-family: "Mono", monospace;
+}
+.footer {
+  margin-top: 14px;
+  color: #7c8799;
+  font-size: 10px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <span class="avatar">
+      {% if data.player_avatar %}
+      <img src="{{ data.player_avatar }}" alt="">
+      {% else %}
+      <span class="avatar-fallback">{{ data.player_initial }}</span>
+      {% endif %}
+    </span>
+    <div class="player-meta">
+      <span class="player-name">{{ data.nickname }}</span>
+      <div class="player-sub">
+        <span>UID {{ data.uid }}</span>
+        <span>Lv.{{ data.level }}</span>
+        <span>{{ data.season }}</span>
+        {% if data.clan_name %}
+        <span class="clan">{{ data.clan_name }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="title-block">
+      <div class="title">历史战绩</div>
+      <div class="title-note">最近 {{ data.match_count }} 场 · 数据来自 Dakanu</div>
+    </div>
+  </div>
+  <div class="section-head"><span class="section-title">对局记录</span></div>
+  <div class="matches">
+    {% for match in data.matches %}
+    <article class="match match-{{ match.result_class }}">
+      <div class="match-bar"></div>
+      <div class="match-main">
+        {% if match.map_asset %}
+        <div class="match-art" style="background-image:url('{{ match.map_asset }}')"></div>
+        <div class="match-veil"></div>
+        {% endif %}
+        <div class="match-content">
+          <div class="match-info">
+            <span class="mode">{{ match.mode_label }}</span>
+            <span class="time">{{ match.played_at }}</span>
+            <span class="result">{{ match.result_label }}</span>
+            <span class="duration">{{ match.duration }}</span>
+          </div>
+          <div class="kda-wrap">
+            <div class="role-wrap">
+              {% if match.role_asset %}
+              <div class="role-art"><img src="{{ match.role_asset }}" alt=""></div>
+              {% else %}
+              <div class="role-art role-empty"></div>
+              {% endif %}
+              {% if match.badge_text %}
+              <span class="badge badge-{{ match.badge_tone }}">{{ match.badge_text }}</span>
+              {% endif %}
+            </div>
+            <div class="kda-body">
+              <span class="kda-line"><b>{{ match.kills }}</b><i>/</i><b class="death">{{ match.deaths }}</b><i>/</i><b>{{ match.assists }}</b></span>
+              <span class="kda-ratio">{{ match.kda_ratio }} : 1 KDA</span>
+              {% if match.participation %}
+              <span class="kda-extra">{{ match.participation }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="score-box">
+            <div class="score-line">
+              {% if match.opponent_score is none %}
+              <span class="score-single">{{ match.my_score }}</span>
+              {% else %}
+              <span class="score-self">{{ match.my_score }}</span>
+              <span class="score-sep">:</span>
+              <span class="score-op">{{ match.opponent_score }}</span>
+              {% endif %}
+            </div>
+            <span class="score-label">得分</span>
+            {% if match.delta_text %}
+            <span class="delta {{ match.delta_class }}">{{ match.delta_text }}</span>
+            {% endif %}
+            <span class="map-name">{{ match.map_name }}</span>
+          </div>
+          {% if match.teams %}
+          <div class="roster">
+            {% for team in match.teams %}
+            <div class="roster-team">
+              {% for player in team.players %}
+              <div class="roster-player{% if player.is_target %} is-target{% endif %}">
+                {% if player.avatar %}
+                <span class="mini-avatar"><img src="{{ player.avatar }}" alt=""></span>
+                {% else %}
+                <span class="mini-avatar is-empty">{{ player.initial }}</span>
+                {% endif %}
+                <span class="roster-name">{{ player.nickname }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="roster is-empty">阵容详情暂不可用</div>
+          {% endif %}
+        </div>
+        <div class="match-footer"><span>对局编号：{{ match.room_id }}</span></div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

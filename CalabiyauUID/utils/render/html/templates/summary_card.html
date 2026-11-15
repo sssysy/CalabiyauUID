@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>战绩总览</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+}
+.card {
+  width: 100%;
+  padding: 24px 24px 0;
+  background: linear-gradient(135deg, #f8fafc 0%, #e8edf4 55%, #dfe7f2 100%);
+}
+.top {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.identity {
+  width: 268px;
+  flex: none;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #dce3ec;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(39, 55, 80, .08);
+}
+.identity-main {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 18px 16px;
+  border-bottom: 1px solid #e4e9f0;
+}
+.identity-meta {
+  flex: 1;
+  min-width: 0;
+}
+.avatar {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #eef2f7;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #e2e8f1;
+}
+.avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.name {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  max-height: 53px;
+  overflow: hidden;
+}
+.uid {
+  margin-top: 5px;
+  color: #7c8799;
+  font-size: 13px;
+  letter-spacing: .2px;
+}
+.season {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #edf3ff;
+  color: #356fd1;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f4f8;
+  color: #68758a;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.badge.is-open {
+  background: #eaf7f0;
+  color: #23865d;
+}
+.badge.is-clan {
+  background: #fff3e8;
+  color: #a76222;
+}
+.mini-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: #e4e9f0;
+}
+.mini {
+  width: calc(50% - 1px);
+  padding: 10px 14px;
+  background: #fff;
+  min-height: 58px;
+}
+.mini-label {
+  display: block;
+  color: #818da0;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.mini-value {
+  font-size: 16px;
+  font-weight: 650;
+  color: #263247;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #dce3ec;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(39, 55, 80, .07);
+  overflow: hidden;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 17px;
+  border-bottom: 1px solid #edf0f5;
+}
+.panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #263247;
+}
+.panel-note {
+  font-size: 12px;
+  color: #8994a6;
+}
+.summary-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 17px 14px;
+}
+.summary-highlight {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+.highlight-item {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #fbfcfe;
+  border: 1px solid #e7ebf1;
+}
+.highlight-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.highlight-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #505e73;
+}
+.highlight-sub {
+  font-size: 11px;
+  color: #8994a6;
+}
+.highlight-val {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #263247;
+}
+.highlight-val.is-blue {
+  color: #3778e8;
+}
+.highlight-kda-sub {
+  font-size: 15px;
+  color: #788497;
+  font-weight: 400;
+}
+.highlight-desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8994a6;
+}
+.bar {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: #e8edf5;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4b8df2, #2c69d8);
+}
+.stats-table {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e7ebf1;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.stats-row {
+  display: flex;
+  width: 100%;
+}
+.stat {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 10px;
+  background: #fff;
+  border-right: 1px solid #e7ebf1;
+}
+.stat:last-child {
+  border-right: 0;
+}
+.stats-row:first-child .stat {
+  border-bottom: 1px solid #e7ebf1;
+}
+.stat-label {
+  display: block;
+  color: #8490a2;
+  font-size: 11px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+  color: #273348;
+  white-space: nowrap;
+}
+.trend-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 17px 14px;
+}
+.trend-chart {
+  width: 360px;
+  flex: none;
+}
+.trend-svg {
+  display: block;
+  width: 360px;
+  height: 150px;
+}
+.trend-side {
+  flex: 1;
+  min-width: 0;
+}
+.trend-kicker {
+  display: block;
+  color: #8792a4;
+  font-size: 11px;
+  margin-bottom: 5px;
+  white-space: nowrap;
+}
+.trend-tier {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.trend-score {
+  margin-top: 5px;
+  color: #596579;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.trend-net {
+  margin-top: 8px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+.trend-net.is-up {
+  color: #ef5d5d;
+}
+.trend-net.is-down {
+  color: #3f92e8;
+}
+.trend-record {
+  margin-top: 7px;
+  color: #8994a6;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.trend-empty {
+  padding: 30px 17px;
+  color: #98a2b2;
+  text-align: center;
+  font-size: 13px;
+}
+.rank-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: #e7ebf1;
+}
+.rank-card {
+  padding: 12px 14px;
+  background: #fff;
+}
+.rank-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+  color: #7b8799;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rank-card-body {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.rank-card-icon {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 50%;
+  background: #f3f5f8;
+  overflow: hidden;
+}
+.rank-card-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.rank-card-name {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.rank-card-sub {
+  margin-top: 4px;
+  color: #788497;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rank-card-right {
+  margin-left: auto;
+  text-align: right;
+}
+.rank-card-right b {
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+  color: #3c485b;
+}
+.rank-card-right span {
+  display: block;
+  margin-top: 5px;
+  color: #929cad;
+  font-size: 10px;
+}
+.challenge-empty {
+  padding: 18px 14px;
+  color: #9aa4b4;
+  font-size: 12px;
+  text-align: center;
+  background: #fff;
+}
+.baseplate {
+  padding: 12px 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.baseplate-label {
+  display: flex;
+  justify-content: space-between;
+  color: #7b8799;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.baseplate-stage {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f3f6fa;
+}
+.baseplate-art {
+  position: absolute;
+  left: 10%;
+  top: 9%;
+  right: 10%;
+  bottom: 13%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #eef2f7;
+}
+.baseplate-art.is-full {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 8px;
+}
+.baseplate-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 26%;
+}
+.baseplate-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.baseplate-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.stat-value.is-blue {
+  color: #3778e8;
+}
+.stat-value.is-gold {
+  color: #c39023;
+}
+.lower {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.role-list {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.role-card {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px 9px;
+  border: 1px solid #e7ebf1;
+  border-radius: 10px;
+  background: #fbfcfe;
+  text-align: center;
+}
+.role-img {
+  width: 100%;
+  height: 98px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #edf2f8;
+  margin-bottom: 6px;
+}
+.role-img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.role-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #344156;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.role-rate {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #3778e8;
+}
+.role-count {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #7b8799;
+  white-space: nowrap;
+}
+.role-kd {
+  margin-top: 1px;
+  font-size: 10px;
+  color: #929cac;
+  font-family: "Mono", Consolas, monospace;
+  white-space: nowrap;
+}
+.mode-block {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f2f4f8;
+}
+.mode-block:last-child {
+  border-bottom: 0;
+}
+.mode-head {
+  display: flex;
+  justify-content: space-between;
+  color: #4a566b;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.mode-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+.mode-head span:last-child {
+  color: #97a1b1;
+  font-weight: 400;
+  font-size: 12px;
+}
+.mode-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mode-grid-row {
+  display: flex;
+  width: 100%;
+}
+.mode-grid .stat {
+  padding: 6px 10px;
+  width: 33.3333%;
+  min-height: 48px;
+  border-right: 1px solid #edf0f5;
+  border-bottom: 1px solid #edf0f5;
+}
+.mode-grid-row:last-child .stat {
+  border-bottom: 0;
+}
+.mode-grid .stat:nth-child(3) {
+  border-right: 0;
+}
+.mode-grid .stat-label {
+  font-size: 10px;
+}
+.mode-grid .stat-value {
+  font-size: 14px;
+}
+.empty {
+  padding: 22px 17px;
+  color: #98a2b2;
+  text-align: center;
+  font-size: 13px;
+}
+.footer {
+  text-align: center;
+  padding: 10px 2px 8px;
+  color: #929cac;
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top">
+    <div class="identity">
+      <div class="identity-main">
+        <div class="avatar">{% if data.avatar %}<img src="{{ data.avatar }}" alt="">{% endif %}</div>
+        <div class="identity-meta">
+          <div class="name">{{ data.nickname }}</div>
+          <div class="uid">UID {{ data.uid }}</div>
+          <span class="season">{{ data.season }}</span>
+          <div class="badges">
+            <span class="badge is-open">{{ data.privacy_label }}</span>
+            <span class="badge">{{ data.verify_label }}</span>
+            {% if data.clan_name %}
+            <span class="badge is-clan">战队 {{ data.clan_name }}</span>
+            {% else %}
+            <span class="badge">无战队</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="mini-grid">
+        <div class="mini"><span class="mini-label">等级</span><span class="mini-value">{{ data.level }}</span></div>
+        <div class="mini"><span class="mini-label">赞誉</span><span class="mini-value">{{ data.laud }}</span></div>
+        <div class="mini"><span class="mini-label">曾用名</span><span class="mini-value">{{ data.previous_names }}</span></div>
+        <div class="mini"><span class="mini-label">获赞</span><span class="mini-value">{{ data.like_count }}</span></div>
+      </div>
+      <div class="rank-stack">
+        <div class="rank-card">
+          <div class="rank-card-head"><span>排位赛 · 当前段位</span><span>{{ data.season }}</span></div>
+          <div class="rank-card-body">
+            <div class="rank-card-icon">{% if data.tier_icon %}<img src="{{ data.tier_icon }}" alt="">{% endif %}</div>
+            <div>
+              <div class="rank-card-name" style="color: {{ data.tier_color }}">{{ data.tier_label }}</div>
+              <div class="rank-card-sub">{{ data.division_score }} 段位分</div>
+            </div>
+            <div class="rank-card-right"><b>{{ data.rank_pos }}</b><span>段位排名</span></div>
+          </div>
+        </div>
+        <div class="rank-card">
+          <div class="rank-card-head"><span>排位赛 · 历史最高</span><span>赛季 S{{ data.historical_season }}</span></div>
+          <div class="rank-card-body">
+            <div class="rank-card-icon">{% if data.top_tier_icon %}<img src="{{ data.top_tier_icon }}" alt="">{% endif %}</div>
+            <div>
+              <div class="rank-card-name" style="color: {{ data.top_color }}">{{ data.top_label }}</div>
+              <div class="rank-card-sub">{{ data.top_division_score }} 历史段位分</div>
+            </div>
+            <div class="rank-card-right"><b>{{ data.historical_pos }}</b><span>历史排名</span></div>
+          </div>
+        </div>
+        <div class="rank-card">
+          <div class="rank-card-head"><span>挑战赛 · 段位</span><span>{{ data.season }}</span></div>
+          {% if data.challenge is not none %}
+          <div class="rank-card-body">
+            <div class="rank-card-icon">{% if data.challenge.icon %}<img src="{{ data.challenge.icon }}" alt="">{% endif %}</div>
+            <div>
+              <div class="rank-card-name" style="color: {{ data.challenge.color }}">{{ data.challenge.name }}</div>
+              <div class="rank-card-sub">{{ data.challenge.score }} 挑战分 · 胜率 {{ data.challenge.win_rate }}</div>
+            </div>
+            <div class="rank-card-right"><b>{{ data.challenge.star }}</b><span>星级</span></div>
+          </div>
+          {% else %}
+          <div class="challenge-empty">暂无挑战赛段位数据</div>
+          {% endif %}
+        </div>
+        <div class="baseplate">
+          <div class="baseplate-label"><span>基板</span><span>玩家展示图</span></div>
+          <div class="baseplate-stage">
+            {% if data.baseplate and data.frame %}
+            <div class="baseplate-art"><img src="{{ data.baseplate }}" alt=""></div>
+            <div class="baseplate-frame"><img src="{{ data.frame }}" alt=""></div>
+            {% elif data.baseplate %}
+            <div class="baseplate-art is-full"><img src="{{ data.baseplate }}" alt=""></div>
+            {% else %}
+            <div class="challenge-empty">暂无基板展示图</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">生涯总览</span>
+          <span class="panel-note">{{ data.rounds }} 场对局</span>
+        </div>
+        <div class="summary-top">
+          <div class="summary-highlight">
+            <div class="highlight-item">
+              <div class="highlight-head">
+                <span class="highlight-label">胜率</span>
+                <span class="highlight-sub">{{ data.wins }} 胜 / {{ data.losses }} 负</span>
+              </div>
+              <div class="highlight-val is-blue">{{ data.win_rate_text }}</div>
+              <div class="bar"><div class="bar-fill" style="width: {{ data.bar_width_pct }}%"></div></div>
+            </div>
+            <div class="highlight-item">
+              <div class="highlight-head">
+                <span class="highlight-label">K/D · KDA</span>
+                <span class="highlight-sub">{{ data.kills }} / {{ data.deaths }} / {{ data.assists }}</span>
+              </div>
+              <div class="highlight-val">{{ data.kd_text }} <small class="highlight-kda-sub">/ {{ data.kda_text }}</small></div>
+              <div class="highlight-desc">总击杀 / 死亡 / 助攻</div>
+            </div>
+          </div>
+          <div class="stats-table">
+            <div class="stats-row">
+              <div class="stat"><span class="stat-label">场均伤害</span><span class="stat-value">{{ data.avg_damage }}</span></div>
+              <div class="stat"><span class="stat-label">回合均伤</span><span class="stat-value">{{ data.round_avg_damage }}</span></div>
+              <div class="stat"><span class="stat-label">场均击杀</span><span class="stat-value">{{ data.avg_kill }}</span></div>
+              <div class="stat"><span class="stat-label">场均死亡</span><span class="stat-value">{{ data.avg_death }}</span></div>
+            </div>
+            <div class="stats-row">
+              <div class="stat"><span class="stat-label">场均助攻</span><span class="stat-value">{{ data.avg_assist }}</span></div>
+              <div class="stat"><span class="stat-label">爆头率</span><span class="stat-value">{{ data.headshot_rate }}</span></div>
+              <div class="stat"><span class="stat-label">MVP 率</span><span class="stat-value is-gold">{{ data.mvp_rate }}</span></div>
+              <div class="stat"><span class="stat-label">MVP 次数</span><span class="stat-value is-gold">{{ data.mvp_count }}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">排位分趋势</span><span class="panel-note">最近 12 场排位</span></div>
+        <div class="trend-wrap">
+          <div class="trend-chart">
+            {% if data.trend.has_chart %}
+            <svg class="trend-svg" viewBox="0 0 360 150" width="360" height="150">
+              <defs>
+                <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#f47b20" stop-opacity=".28" />
+                  <stop offset="100%" stop-color="#f47b20" stop-opacity=".02" />
+                </linearGradient>
+              </defs>
+              <polygon points="{{ data.trend.svg_area }}" fill="url(#trend-fill)" />
+              <polyline points="{{ data.trend.svg_line }}" fill="none" stroke="#f47b20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              {% for dot in data.trend.dots %}
+              <circle cx="{{ dot.x }}" cy="{{ dot.y }}" r="3.5" fill="#f47b20" stroke="#fff" stroke-width="1.5" />
+              {% endfor %}
+            </svg>
+            {% else %}
+            <div class="trend-empty">排位对局不足，暂时无法绘制趋势</div>
+            {% endif %}
+          </div>
+          <div class="trend-side">
+            <span class="trend-kicker">最近 {{ data.trend.match_count }} 场排位</span>
+            <div class="trend-tier" style="color: {{ data.trend.tier_color }}">{{ data.trend.tier_label }}</div>
+            <div class="trend-score">{{ data.trend.division_score }} 分</div>
+            <div class="trend-net {{ data.trend.net_class }}">{{ data.trend.net_text }}</div>
+            <div class="trend-record">{{ data.trend.wins }} 胜 {{ data.trend.losses }} 负 {{ data.trend.draws }} 平</div>
+          </div>
+        </div>
+      </div>
+      <div class="lower">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">角色使用</span><span class="panel-note">按场次</span></div>
+          {% if data.roles %}
+          <div class="role-list">
+            {% for role in data.roles %}
+            <div class="role-card">
+              <div class="role-img">{% if role.image %}<img src="{{ role.image }}" alt="">{% endif %}</div>
+              <div class="role-name">{{ role.name }}</div>
+              <div class="role-rate">{{ role.win_rate }}</div>
+              <div class="role-count">{{ role.count }} 场</div>
+              <div class="role-kd">K/D {{ role.kd }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty">暂无角色使用数据</div>
+          {% endif %}
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">模式统计</span><span class="panel-note">当前赛季</span></div>
+          {% if data.modes %}
+            {% for mode in data.modes %}
+            <div class="mode-block">
+              <div class="mode-head"><span class="mode-name">{{ mode.label }}</span><span>{{ mode.rounds }} 场</span></div>
+              <div class="mode-grid">
+                <div class="mode-grid-row">
+                  <div class="stat"><span class="stat-label">胜率</span><span class="stat-value is-blue">{{ mode.win_rate }}</span></div>
+                  <div class="stat"><span class="stat-label">K/D</span><span class="stat-value is-blue">{{ mode.kd }}</span></div>
+                  <div class="stat"><span class="stat-label">场均伤害</span><span class="stat-value">{{ mode.avg_damage }}</span></div>
+                </div>
+                <div class="mode-grid-row">
+                  <div class="stat"><span class="stat-label">场均击杀</span><span class="stat-value">{{ mode.avg_kill }}</span></div>
+                  <div class="stat"><span class="stat-label">爆头率</span><span class="stat-value">{{ mode.headshot_rate }}</span></div>
+                  <div class="stat"><span class="stat-label">MVP 率</span><span class="stat-value is-gold">{{ mode.mvp_rate }}</span></div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="empty">暂无模式统计</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>
