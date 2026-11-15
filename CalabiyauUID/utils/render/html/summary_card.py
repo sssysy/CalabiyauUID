@@ -45,6 +45,12 @@ def _tier(segment: int) -> tuple[str, str, str]:
     return "未定级", "#8d99ad", ""
 
 
+def tier_display(segment: int) -> tuple[str, str, int]:
+    """返回段位展示名、主题色与图标编号；未定级时图标编号为 0。"""
+    label, color, index_text = _tier(segment)
+    return label, color, int(index_text) if index_text else 0
+
+
 def tier_index(segment: int) -> int:
     """按段位返回素材目录里的段位图标编号；未定级返回 0。"""
     _, _, tier_index = _tier(segment)
@@ -477,7 +483,7 @@ body{{width:100%;min-height:1px;background:#eceff4;color:#172033;font-family:"Mi
     </div>
   </div>
 </div>
-<div class="footer">Create by GsCore &amp; Power by CalabiyauUID &amp; Data by 白泉幽奈</div>
+<div class="footer">Create by GsCore &amp; Power by sssysy/CalabiyauUID &amp; Data by 白泉幽奈</div>
 </div></body></html>"""
 
 

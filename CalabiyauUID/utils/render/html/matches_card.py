@@ -297,7 +297,7 @@ body{{width:100%;min-height:1px;background:#e9edf2;color:#172033;font-family:"Mi
 </div>
 <div class="section-head"><span class="section-title">对局记录</span></div>
 <div class="matches">{match_html}</div>
-<div class="footer">Create by GsCore &amp; Power by CalabiyauUID &amp; Data by 白泉幽奈</div>
+<div class="footer">Create by GsCore &amp; Power by sssysy/CalabiyauUID &amp; Data by 白泉幽奈</div>
 </div></body></html>"""
 
 

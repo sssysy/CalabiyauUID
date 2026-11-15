@@ -319,6 +319,16 @@ def role_image_url(role_id: int) -> str:
     return f"{BASE_URL}/roles/{slug}.webp" if slug else ""
 
 
+def avatar_image_url(avatar_id: int) -> str:
+    """按头像 ID 返回站点头像地址。"""
+    return f"{BASE_URL}/avatars/{avatar_id}.webp"
+
+
+def tier_image_url(tier_index: int) -> str:
+    """按段位图标编号返回站点段位图标地址。"""
+    return f"{BASE_URL}/tiers/tier-{tier_index}.png" if tier_index > 0 else ""
+
+
 class DakanuError(Exception):
     """Dakanu 请求失败，message 可直接向用户说明原因。"""
 
@@ -557,3 +567,342 @@ def _fetch_leisure_sync(player_id: str) -> DakanuLeisure | None:
 async def fetch_leisure(player_id: str) -> DakanuLeisure | None:
     """读取挑战赛数据；接口无数据时返回 None。"""
     return await _fetch_leisure_sync(player_id)
+
+
+class DakanuRankType(TypedDict):
+    code: int
+    key: str
+    label: str
+
+
+class DakanuRankingEntry(TypedDict):
+    position: int
+    playerId: str
+    nickname: str
+    avatarId: int
+    level: int
+    borderId: int
+    segment: int
+    wins: int
+    totalGames: int
+    roles: list[int]
+    score: int
+    previousScore: int | None
+    scoreDelta: int | None
+    region: str | None
+    province: str | None
+    city: str | None
+    cityCode: int | None
+
+
+class DakanuRankingsBoard(TypedDict):
+    ok: bool
+    scope: str
+    rankType: DakanuRankType
+    metricLabel: str
+    start: int
+    end: int
+    total: int
+    day: str
+    compareDay: str
+    updatedAt: int
+    cachedAt: int
+    entries: list[DakanuRankingEntry]
+
+
+class DakanuRankingFloorCurrent(TypedDict):
+    day: str
+    score: int
+    position: int
+    observedAt: int
+    source: str
+
+
+class DakanuRankingFloor(TypedDict):
+    ok: bool
+    region: str
+    seasonId: int
+    current: DakanuRankingFloorCurrent
+    yesterdayDelta: int | None
+
+
+class DakanuRankedSeason(TypedDict):
+    season_id: int
+    label: str
+    current: bool
+
+
+class DakanuCurrentSeason(TypedDict):
+    ok: bool
+    ranked_season: DakanuRankedSeason
+
+
+def _as_int(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _as_str(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _opt_int(mapping: dict[object, object], key: str) -> int | None:
+    if key not in mapping:
+        return None
+    return _as_int(mapping[key])
+
+
+def _opt_str(mapping: dict[object, object], key: str) -> str | None:
+    if key not in mapping:
+        return None
+    return _as_str(mapping[key])
+
+
+def _parse_ranking_entry(raw: object) -> DakanuRankingEntry | None:
+    if not isinstance(raw, dict):
+        return None
+    position = _opt_int(raw, "position")
+    player_id = _opt_str(raw, "playerId")
+    nickname = _opt_str(raw, "nickname")
+    avatar_id = _opt_int(raw, "avatarId")
+    level = _opt_int(raw, "level")
+    border_id = _opt_int(raw, "borderId")
+    segment = _opt_int(raw, "segment")
+    wins = _opt_int(raw, "wins")
+    total_games = _opt_int(raw, "totalGames")
+    score = _opt_int(raw, "score")
+    raw_roles = raw["roles"] if "roles" in raw else None
+    if (
+        position is None
+        or player_id is None
+        or nickname is None
+        or avatar_id is None
+        or level is None
+        or border_id is None
+        or segment is None
+        or wins is None
+        or total_games is None
+        or score is None
+        or not isinstance(raw_roles, list)
+    ):
+        return None
+    roles: list[int] = []
+    for role_item in raw_roles:
+        role_id = _as_int(role_item)
+        if role_id is not None:
+            roles.append(role_id)
+    return {
+        "position": position,
+        "playerId": player_id,
+        "nickname": nickname,
+        "avatarId": avatar_id,
+        "level": level,
+        "borderId": border_id,
+        "segment": segment,
+        "wins": wins,
+        "totalGames": total_games,
+        "roles": roles,
+        "score": score,
+        "previousScore": _opt_int(raw, "previousScore"),
+        "scoreDelta": _opt_int(raw, "scoreDelta"),
+        "region": _opt_str(raw, "region"),
+        "province": _opt_str(raw, "province"),
+        "city": _opt_str(raw, "city"),
+        "cityCode": _opt_int(raw, "cityCode"),
+    }
+
+
+def _parse_rankings_board(payload: object) -> DakanuRankingsBoard | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    raw_rank_type = payload["rankType"] if "rankType" in payload else None
+    raw_entries = payload["entries"] if "entries" in payload else None
+    if not isinstance(raw_rank_type, dict) or not isinstance(raw_entries, list):
+        return None
+    type_code = _opt_int(raw_rank_type, "code")
+    type_key = _opt_str(raw_rank_type, "key")
+    type_label = _opt_str(raw_rank_type, "label")
+    scope = _opt_str(payload, "scope")
+    metric_label = _opt_str(payload, "metricLabel")
+    start = _opt_int(payload, "start")
+    end = _opt_int(payload, "end")
+    total = _opt_int(payload, "total")
+    day = _opt_str(payload, "day")
+    compare_day = _opt_str(payload, "compareDay")
+    updated_at = _opt_int(payload, "updatedAt")
+    cached_at = _opt_int(payload, "cachedAt")
+    if (
+        type_code is None
+        or type_key is None
+        or type_label is None
+        or scope is None
+        or metric_label is None
+        or start is None
+        or end is None
+        or total is None
+        or day is None
+        or compare_day is None
+        or updated_at is None
+        or cached_at is None
+    ):
+        return None
+    entries: list[DakanuRankingEntry] = []
+    for item in raw_entries:
+        entry = _parse_ranking_entry(item)
+        if entry is not None:
+            entries.append(entry)
+    return {
+        "ok": True,
+        "scope": scope,
+        "rankType": {"code": type_code, "key": type_key, "label": type_label},
+        "metricLabel": metric_label,
+        "start": start,
+        "end": end,
+        "total": total,
+        "day": day,
+        "compareDay": compare_day,
+        "updatedAt": updated_at,
+        "cachedAt": cached_at,
+        "entries": entries,
+    }
+
+
+@to_thread
+def _fetch_rankings_sync(rank_type: int, page: int, page_size: int) -> DakanuRankingsBoard:
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(
+                f"{BASE_URL}/api/rankings",
+                params={"type": rank_type, "page": page, "page_size": page_size},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·排位排行] 请求榜单接口失败：{exc}")
+        raise DakanuError("请求排位榜单失败，请稍后再试。") from None
+    if response.status_code in {204, 404}:
+        raise DakanuError("暂无排位榜单数据，请稍后再试。")
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法读取榜单数据，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·排位排行] 读取榜单返回 HTTP {response.status_code}")
+        raise DakanuError("读取排位榜单失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·排位排行] 榜单接口返回非 JSON 响应")
+        raise DakanuError("榜单数据格式异常，请稍后再试。") from None
+    board = _parse_rankings_board(payload)
+    if board is None:
+        logger.warning("[卡拉彼丘·排位排行] 榜单接口响应结构异常")
+        raise DakanuError("榜单数据格式异常，请稍后再试。")
+    return board
+
+
+async def fetch_rankings(rank_type: int = 1, page: int = 1, page_size: int = 50) -> DakanuRankingsBoard:
+    """读取 Dakanu 在线排行榜数据。"""
+    return await _fetch_rankings_sync(rank_type, page, page_size)
+
+
+def _parse_ranking_floor(payload: object) -> DakanuRankingFloor | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    region = _opt_str(payload, "region")
+    season_id = _opt_int(payload, "seasonId")
+    raw_current = payload["current"] if "current" in payload else None
+    if region is None or season_id is None or not isinstance(raw_current, dict):
+        return None
+    day = _opt_str(raw_current, "day")
+    score = _opt_int(raw_current, "score")
+    position = _opt_int(raw_current, "position")
+    observed_at = _opt_int(raw_current, "observedAt")
+    source = _opt_str(raw_current, "source")
+    if day is None or score is None or position is None or observed_at is None or source is None:
+        return None
+    return {
+        "ok": True,
+        "region": region,
+        "seasonId": season_id,
+        "current": {
+            "day": day,
+            "score": score,
+            "position": position,
+            "observedAt": observed_at,
+            "source": source,
+        },
+        "yesterdayDelta": _opt_int(payload, "yesterdayDelta"),
+    }
+
+
+@to_thread
+def _fetch_ranking_floor_sync(season_id: int) -> DakanuRankingFloor | None:
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/rankings/floor", params={"season_id": season_id})
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·排位排行] 请求奇点底分失败：{exc}")
+        return None
+    if response.status_code == 204:
+        return None
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·排位排行] 读取奇点底分返回 HTTP {response.status_code}")
+        return None
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·排位排行] 奇点底分返回非 JSON 响应")
+        return None
+    return _parse_ranking_floor(payload)
+
+
+async def fetch_ranking_floor(season_id: int = 0) -> DakanuRankingFloor | None:
+    """读取当前奇点底分；接口异常时返回 None，不阻断榜单渲染。"""
+    return await _fetch_ranking_floor_sync(season_id)
+
+
+def _parse_current_season(payload: object) -> DakanuCurrentSeason | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    raw_ranked = payload["ranked_season"] if "ranked_season" in payload else None
+    if not isinstance(raw_ranked, dict):
+        return None
+    season_id = _opt_int(raw_ranked, "season_id")
+    label = _opt_str(raw_ranked, "label")
+    current = raw_ranked["current"] if "current" in raw_ranked else None
+    if season_id is None or label is None or not isinstance(current, bool):
+        return None
+    return {
+        "ok": True,
+        "ranked_season": {
+            "season_id": season_id,
+            "label": label,
+            "current": current,
+        },
+    }
+
+
+@to_thread
+def _fetch_current_season_sync() -> DakanuCurrentSeason | None:
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/seasons/current")
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·排位排行] 请求当前赛季失败：{exc}")
+        return None
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·排位排行] 读取当前赛季返回 HTTP {response.status_code}")
+        return None
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·排位排行] 当前赛季返回非 JSON 响应")
+        return None
+    return _parse_current_season(payload)
+
+
+async def fetch_current_season() -> DakanuCurrentSeason | None:
+    """读取当前排位赛季信息；接口异常时返回 None。"""
+    return await _fetch_current_season_sync()
