@@ -1,6 +1,6 @@
 {
     "账号绑定": {
-        "desc": "卡拉彼丘国服账号绑定与查看",
+        "desc": "卡拉彼丘国服账号绑定、查看与切换",
         "data": [
             {
                 "name": "绑定账号",
@@ -24,6 +24,15 @@
                 "name": "查看绑定",
                 "desc": "查看当前已绑定的卡拉彼丘账号",
                 "eg": "查看",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "切换账号",
+                "desc": "切换当前主账号，不传参默认切至下一个",
+                "eg": "切换",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,

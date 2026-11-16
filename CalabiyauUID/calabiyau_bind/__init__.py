@@ -7,7 +7,7 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 
-from .bind_services import bind_account, view_accounts, unbind_account_by_query
+from .bind_services import bind_account, view_accounts, switch_account, unbind_account_by_query
 from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import track_background
 from ..utils.helper.player_resolve import resolve_player_input
@@ -62,3 +62,8 @@ async def calabiyau_unbind(bot: Bot, ev: Event) -> None:
 @sv_bind.on_fullmatch("查看", block=True)
 async def calabiyau_view(bot: Bot, ev: Event) -> None:
     await bot.send(await view_accounts(ev.bot_id, ev.user_id))
+
+
+@sv_bind.on_command("切换", block=True)
+async def calabiyau_switch(bot: Bot, ev: Event) -> None:
+    await bot.send(await switch_account(ev.bot_id, ev.user_id, ev.text.strip()))

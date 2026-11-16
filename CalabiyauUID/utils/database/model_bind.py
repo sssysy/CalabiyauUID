@@ -1,6 +1,7 @@
 """卡拉彼丘账号绑定表与读写逻辑。"""
 
-from typing import TypeVar
+from typing import Literal, TypeVar
+from dataclasses import dataclass
 
 from sqlmodel import Field, col, select
 from sqlalchemy import Table, MetaData, UniqueConstraint, text, delete, select as sa_select, update, inspect
@@ -14,6 +15,15 @@ from gsuid_core.utils.database.base_models import BaseBotIDModel, with_session, 
 
 T_CalabiyauBind = TypeVar("T_CalabiyauBind", bound="CalabiyauBind")
 _LEGACY_SESSION_COLUMNS = frozenset({"bot_id", "bot_self_id", "group_id"})
+SwitchStatus = Literal["no_binds", "single_bind", "not_found", "already_main", "switched"]
+
+
+@dataclass(frozen=True)
+class SwitchBindResult:
+    """切换当前账号的数据库操作结果。"""
+
+    status: SwitchStatus
+    game_uid: str | None = None
 
 
 class CalabiyauBind(BaseBotIDModel, table=True):
@@ -141,6 +151,45 @@ class CalabiyauBind(BaseBotIDModel, table=True):
             current_main = remaining[0]
             await session.execute(update(cls).where(col(cls.id) == current_main.id).values(is_main=True))
         return True, was_main, current_main.game_uid if current_main is not None else None
+
+    @classmethod
+    @with_session
+    async def switch_bind(
+        cls: type[T_CalabiyauBind],
+        session: AsyncSession,
+        bot_id: str,
+        user_id: str,
+        game_uid: str | None = None,
+    ) -> SwitchBindResult:
+        result = await session.execute(
+            select(cls)
+            .where(
+                col(cls.bot_id) == bot_id,
+                col(cls.user_id) == user_id,
+            )
+            .order_by(col(cls.id).asc())
+        )
+        binds = list(result.scalars().all())
+        if not binds:
+            return SwitchBindResult(status="no_binds")
+
+        if game_uid is None:
+            if len(binds) == 1:
+                return SwitchBindResult(status="single_bind", game_uid=binds[0].game_uid)
+            current_index = next((index for index, bind in enumerate(binds) if bind.is_main), 0)
+            target = binds[(current_index + 1) % len(binds)]
+        else:
+            target = next((bind for bind in binds if bind.game_uid == game_uid), None)
+            if target is None:
+                return SwitchBindResult(status="not_found", game_uid=game_uid)
+            if target.is_main:
+                return SwitchBindResult(status="already_main", game_uid=target.game_uid)
+
+        await session.execute(
+            update(cls).where(col(cls.bot_id) == bot_id, col(cls.user_id) == user_id).values(is_main=False)
+        )
+        await session.execute(update(cls).where(col(cls.id) == target.id).values(is_main=True))
+        return SwitchBindResult(status="switched", game_uid=target.game_uid)
 
 
 async def get_main_uid(bot_id: str, user_id: str) -> str | None:

@@ -1,4 +1,4 @@
-"""卡拉彼丘账号绑定、解绑与查看。"""
+"""卡拉彼丘账号绑定、解绑、查看与切换。"""
 
 from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import refresh_player_data
@@ -37,18 +37,27 @@ async def unbind_account(
     return f"已解绑：[{game_uid}]\n当前账号已切换为：[{current_main}]"
 
 
-async def unbind_account_by_query(
+async def _format_bound_account(game_uid: str) -> str:
+    snapshot = await load_player_snapshot(game_uid)
+    if snapshot is None:
+        return f"[{game_uid}]"
+    nickname = snapshot.profile["player"]["nickname"]
+    return f"[{game_uid}] {nickname}"
+
+
+async def _resolve_bound_uid(
     bot_id: str,
     user_id: str,
     query: str,
-) -> str:
+    action_label: str,
+) -> tuple[str | None, str | None]:
     cleaned = query.strip()
     if is_numeric_uid(cleaned):
-        return await unbind_account(bot_id, user_id, cleaned)
+        return cleaned, None
 
     binds = await CalabiyauBind.get_binds(bot_id, user_id)
     if not binds:
-        return "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定。"
+        return None, "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定。"
 
     local_matches: list[str] = []
     for bind in binds:
@@ -56,18 +65,58 @@ async def unbind_account_by_query(
         if snapshot is not None and snapshot.profile["player"]["nickname"] == cleaned:
             local_matches.append(bind.game_uid)
     if len(local_matches) == 1:
-        return await unbind_account(bot_id, user_id, local_matches[0])
+        return local_matches[0], None
     if len(local_matches) > 1:
         candidates = "\n".join(f"- {cleaned}（UID：{uid}）" for uid in local_matches)
-        return f"已绑定多个昵称为「{cleaned}」的账号，请改用 UID 解绑：\n{candidates}"
+        return None, f"已绑定多个昵称为「{cleaned}」的账号，请改用 UID {action_label}：\n{candidates}"
 
     try:
         player_id = await resolve_player_input(cleaned)
     except DakanuError as exc:
-        return f"解绑失败：{exc}"
+        return None, f"{action_label}失败：{exc}"
     if player_id not in {bind.game_uid for bind in binds}:
-        return f"未找到该账号的绑定：[{player_id}] {cleaned}"
-    return await unbind_account(bot_id, user_id, player_id)
+        return None, f"未找到该账号的绑定：[{player_id}] {cleaned}"
+    return player_id, None
+
+
+async def unbind_account_by_query(
+    bot_id: str,
+    user_id: str,
+    query: str,
+) -> str:
+    target_uid, error_message = await _resolve_bound_uid(bot_id, user_id, query, "解绑")
+    if target_uid is None:
+        assert error_message is not None
+        return error_message
+    return await unbind_account(bot_id, user_id, target_uid)
+
+
+async def switch_account(
+    bot_id: str,
+    user_id: str,
+    query: str = "",
+) -> str:
+    cleaned = query.strip()
+    target_uid: str | None = None
+    if cleaned:
+        target_uid, error_message = await _resolve_bound_uid(bot_id, user_id, cleaned, "切换")
+        if target_uid is None:
+            assert error_message is not None
+            return error_message
+
+    result = await CalabiyauBind.switch_bind(bot_id, user_id, target_uid)
+    if result.status == "no_binds":
+        return "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定。"
+    if result.status == "not_found":
+        assert result.game_uid is not None
+        return f"未找到该账号的绑定：[{result.game_uid}]"
+    assert result.game_uid is not None
+    account = await _format_bound_account(result.game_uid)
+    if result.status == "single_bind":
+        return f"当前仅绑定 1 个账号：{account}，无需切换。"
+    if result.status == "already_main":
+        return f"当前账号已是：{account}"
+    return f"已切换当前账号为：{account}"
 
 
 async def view_accounts(
