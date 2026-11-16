@@ -1,8 +1,11 @@
 """Dakanu 公开读取接口。"""
 
+import re
 import time
 import asyncio
 from typing import TypedDict, NotRequired
+from dataclasses import dataclass
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -12,6 +15,7 @@ from gsuid_core.logger import logger
 BASE_URL = "https://www.dakanu.com"
 _REFRESH_POLL_INTERVAL = 2.0
 _REFRESH_TIMEOUT = 300.0
+_ROOM_ID_RE = re.compile(r"^[1-9]\d{0,19}$")
 
 
 class DakanuMedal(TypedDict, total=False):
@@ -209,6 +213,14 @@ class DakanuMatchDetail(TypedDict, total=False):
     upstreamCode: int
     viewerFallback: object | None
     cached: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuReplayTicket:
+    room_id: str
+    download_url: str
+    cookies: dict[str, str]
+    verified: bool
 
 
 class DakanuRefreshError(TypedDict):
@@ -547,6 +559,105 @@ def _fetch_match_detail_sync(player_id: str, room_id: str) -> DakanuMatchDetail 
 async def fetch_match_detail(player_id: str, room_id: str) -> DakanuMatchDetail | None:
     """读取单场对局详情；无详情时返回 None。"""
     return await _fetch_match_detail_sync(player_id, room_id)
+
+
+def is_valid_room_id(room_id: str) -> bool:
+    """校验对局 ID 是否符合 Dakanu 规则。"""
+    return bool(_ROOM_ID_RE.fullmatch(room_id))
+
+
+def _safe_error_text(response: httpx.Response) -> str | None:
+    try:
+        payload: object = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    err = _opt_str(payload, "error")
+    if err is None:
+        return None
+    cleaned = err.strip()
+    if not cleaned or "<" in cleaned:
+        return None
+    return cleaned
+
+
+def _resolve_replay_download_url(raw_url: str, room_id: str) -> str | None:
+    base_parts = urlsplit(BASE_URL)
+    resolved = urljoin(f"{BASE_URL}/", raw_url)
+    parts = urlsplit(resolved)
+    expected_path = f"/api/match/{room_id}/replay/download"
+    if parts.scheme != base_parts.scheme or parts.netloc != base_parts.netloc:
+        return None
+    if parts.path != expected_path:
+        return None
+    return resolved
+
+
+@to_thread
+def _fetch_replay_download_ticket_sync(room_id: str) -> DakanuReplayTicket:
+    url = f"{BASE_URL}/api/match/{room_id}/replay"
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.post(url)
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·回放下载] 请求对局 {room_id} 回放地址失败：{exc}")
+        raise DakanuError("请求对局回放地址失败，请稍后再试。") from None
+
+    if response.status_code == 404:
+        raise DakanuError(f"没有找到对局 {room_id} 的回放文件。")
+    if response.status_code == 429:
+        raise DakanuError("回放请求过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法获取回放，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·回放下载] 对局 {room_id} 返回 HTTP {response.status_code}")
+        err_text = _safe_error_text(response)
+        raise DakanuError(err_text or "获取对局回放地址失败，请稍后再试。")
+
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning(f"[卡拉彼丘·回放下载] 对局 {room_id} 返回非 JSON 响应")
+        raise DakanuError("回放响应数据格式异常，请稍后再试。") from None
+
+    if not isinstance(payload, dict):
+        logger.warning(f"[卡拉彼丘·回放下载] 对局 {room_id} 响应非字典")
+        raise DakanuError("回放响应数据格式异常，请稍后再试。")
+
+    ok = _opt_bool(payload, "ok")
+    if ok is not True:
+        err = _opt_str(payload, "error")
+        if err is not None and err.strip() and "<" not in err:
+            raise DakanuError(err.strip())
+        raise DakanuError("战绩站暂未提供该对局的回放文件。")
+
+    raw_url = _opt_str(payload, "url")
+    if raw_url is None:
+        logger.warning(f"[卡拉彼丘·回放下载] 对局 {room_id} 缺少 url 字段")
+        raise DakanuError("未获取到可用的回放下载地址。")
+
+    resolved_url = _resolve_replay_download_url(raw_url, room_id)
+    if resolved_url is None:
+        logger.warning(f"[卡拉彼丘·回放下载] 对局 {room_id} 返回异常下载地址：{raw_url}")
+        raise DakanuError("回放下载地址无效，请稍后再试。")
+
+    cookies = {str(name): str(value) for name, value in response.cookies.items()}
+    verified_raw = _opt_bool(payload, "verified")
+    return DakanuReplayTicket(
+        room_id=room_id,
+        download_url=resolved_url,
+        cookies=cookies,
+        verified=bool(verified_raw) if verified_raw is not None else False,
+    )
+
+
+async def fetch_replay_download_ticket(room_id: str) -> DakanuReplayTicket:
+    """申请对局回放下载凭证与临时 Cookie。"""
+    cleaned = room_id.strip()
+    if not is_valid_room_id(cleaned):
+        raise DakanuError("对局 ID 格式不正确，请传入纯数字对局 ID。")
+    return await _fetch_replay_download_ticket_sync(cleaned)
 
 
 def _is_refresh_response(value: object) -> bool:

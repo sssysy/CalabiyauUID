@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from dataclasses import dataclass
 from collections.abc import Sequence
 
 import httpx
@@ -12,6 +13,9 @@ from .utils.paths import DATA_DIR
 
 IMG_CACHE_DIR: Path = DATA_DIR / "img_cache"
 IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+REPLAY_CACHE_DIR: Path = DATA_DIR / "cache" / "replay"
+REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
 
@@ -75,3 +79,46 @@ async def download_to_dir(
     if retcode != 200 or not target.is_file() or target.stat().st_size <= 0:
         return None
     return target
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayDownloadResult:
+    path: Path | None
+    status_code: int | None
+
+
+def replay_cache_path(room_id: str) -> Path:
+    """返回指定对局回放在本地缓存中的目标路径。"""
+    return REPLAY_CACHE_DIR / f"dakanu.com_{room_id}.replay"
+
+
+def find_cached_replay(room_id: str) -> Path | None:
+    """命中本地非空回放缓存时返回路径，否则返回 None。"""
+    target = replay_cache_path(room_id)
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    return None
+
+
+async def download_replay(
+    room_id: str,
+    url: str,
+    cookies: dict[str, str],
+) -> ReplayDownloadResult:
+    """携带临时 Cookie 下载对局回放文件到 cache/replay/。"""
+    if not url or not room_id:
+        return ReplayDownloadResult(path=None, status_code=None)
+    REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    target = replay_cache_path(room_id)
+    async with httpx.AsyncClient(cookies=cookies, timeout=120.0, follow_redirects=True) as client:
+        raw_retcode: object = await download_file(
+            url,
+            REPLAY_CACHE_DIR,
+            target.name,
+            sess=client,
+            tag="[卡拉彼丘·回放下载]",
+        )
+    status_code = raw_retcode if isinstance(raw_retcode, int) and not isinstance(raw_retcode, bool) else None
+    if status_code == 200 and target.is_file() and target.stat().st_size > 0:
+        return ReplayDownloadResult(path=target, status_code=200)
+    return ReplayDownloadResult(path=None, status_code=status_code)
