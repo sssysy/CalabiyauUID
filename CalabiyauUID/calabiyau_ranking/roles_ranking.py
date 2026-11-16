@@ -1,4 +1,4 @@
-"""超弦体排行数据拉取、命令解析与卡片渲染。"""
+"""角色胜率与出场率排行数据拉取、命令解析与卡片渲染。"""
 
 import time
 import asyncio
@@ -16,7 +16,7 @@ from ..utils.render.html.roles_ranking_card import render_roles_ranking_card
 
 _CACHE_TTL_SECONDS = 30.0
 _DOWNLOAD_CONCURRENCY = 8
-_USAGE_TEXT = "用法：kq超弦体排行 [登场率|胜率] [排位|全部]"
+_ROLES_RANKING_PATTERN = r"^角色(?P<scope>排位|全部)?(?P<metric>出场率|胜率)?排行$"
 
 
 @dataclass(frozen=True)
@@ -29,42 +29,13 @@ _cache_lock = asyncio.Lock()
 _cached_cards: dict[tuple[str, bool], _RolesRankingCardCache] = {}
 
 
-def _parse_roles_ranking_args(raw_text: str) -> tuple[str, bool] | None:
-    tokens = raw_text.strip().split()
-    sort_by: str | None = None
-    ranked_only: bool | None = None
-    for token in tokens:
-        if token == "登场率":
-            if sort_by is not None:
-                return None
-            sort_by = "appearanceRate"
-        elif token == "胜率":
-            if sort_by is not None:
-                return None
-            sort_by = "winRate"
-        elif token == "排位":
-            if ranked_only is not None:
-                return None
-            ranked_only = True
-        elif token == "全部":
-            if ranked_only is not None:
-                return None
-            ranked_only = False
-        else:
-            return None
-    return (
-        sort_by if sort_by is not None else "appearanceRate",
-        ranked_only if ranked_only is not None else True,
-    )
-
-
 async def build_roles_ranking_card(
     *,
-    sort_by: str = "appearanceRate",
+    sort_by: str = "winRate",
     ranked_only: bool = True,
     use_cache: bool = True,
 ) -> bytes:
-    """拉取超弦体排行并渲染卡片，带 30 秒短时内存缓存。"""
+    """拉取角色胜率与出场率排行并渲染卡片，带 30 秒短时内存缓存。"""
     if sort_by not in {"appearanceRate", "winRate"}:
         raise ValueError(f"不支持的排序字段：{sort_by}")
     cache_key = (sort_by, ranked_only)
@@ -97,23 +68,22 @@ async def build_roles_ranking_card(
 
 
 def register_roles_ranking(sv_ranking: SV) -> None:
-    """向排行服务注册超弦体排行命令。"""
+    """向排行服务注册角色胜率与出场率排行命令。"""
 
-    @sv_ranking.on_command("超弦体排行", block=True)
+    @sv_ranking.on_regex(_ROLES_RANKING_PATTERN, block=True)
     async def calabiyau_roles_ranking(bot: Bot, ev: Event) -> None:
-        parsed = _parse_roles_ranking_args(ev.text)
-        if parsed is None:
-            await bot.send(_USAGE_TEXT)
-            return
-        sort_by, ranked_only = parsed
+        scope = ev.regex_dict["scope"] if "scope" in ev.regex_dict else None
+        metric = ev.regex_dict["metric"] if "metric" in ev.regex_dict else None
+        ranked_only = scope != "全部"
+        sort_by = "appearanceRate" if metric == "出场率" else "winRate"
         try:
             image = await build_roles_ranking_card(sort_by=sort_by, ranked_only=ranked_only)
         except DakanuError as exc:
-            logger.warning(f"[卡拉彼丘·超弦体排行] 获取超弦体排行失败：{exc}")
+            logger.warning(f"[卡拉彼丘·角色排行] 获取角色排行失败：{exc}")
             await bot.send(str(exc))
             return
         except RuntimeError:
-            logger.exception("[卡拉彼丘·超弦体排行] 渲染卡片失败")
-            await bot.send("超弦体排行卡片生成失败，请稍后再试。")
+            logger.exception("[卡拉彼丘·角色排行] 渲染卡片失败")
+            await bot.send("角色排行卡片生成失败，请稍后再试。")
             return
         await bot.send(image)

@@ -1,4 +1,4 @@
-"""卡拉彼丘角色单榜命令与卡片构建。"""
+"""卡拉彼丘超弦体单榜命令与卡片构建。"""
 
 from gsuid_core.sv import SV
 from gsuid_core.bot import Bot
@@ -9,7 +9,7 @@ from .ranking_services import build_board_ranking_card
 from ..utils.api.dakanu import DakanuError, fetch_meta_roles
 from ..utils.helper.maps import resolve_role_alias, get_role_display_names
 
-_ROLE_USAGE_PREFIX = "请提供角色名或角色 ID，例如：kq角色排行 星绘 或 kq角色排行 146"
+_ROLE_USAGE_PREFIX = "请提供角色名或角色 ID，例如：kq超弦体排行 星绘 或 kq超弦体排行 146"
 
 
 async def _load_role_names() -> dict[int, str]:
@@ -60,7 +60,7 @@ async def _build_usage_message() -> str:
     try:
         roles = await _load_role_names()
     except DakanuError as exc:
-        logger.warning(f"[卡拉彼丘·角色排行] 获取角色列表失败：{exc}")
+        logger.warning(f"[卡拉彼丘·超弦体排行] 获取角色列表失败：{exc}")
         roles = get_role_display_names()
 
     if not roles:
@@ -70,9 +70,9 @@ async def _build_usage_message() -> str:
 
 
 def register_role_board_ranking(sv_ranking: SV) -> None:
-    """向排行服务注册角色单榜命令。"""
+    """向排行服务注册超弦体单榜命令。"""
 
-    @sv_ranking.on_command("角色排行", block=True)
+    @sv_ranking.on_command("超弦体排行", block=True)
     async def calabiyau_role_board_ranking(bot: Bot, ev: Event) -> None:
         query = ev.text.strip()
         if not query:
@@ -82,7 +82,7 @@ def register_role_board_ranking(sv_ranking: SV) -> None:
         try:
             resolved = await resolve_role_query(query)
         except DakanuError as exc:
-            logger.warning(f"[卡拉彼丘·角色排行] 解析角色参数失败：{exc}")
+            logger.warning(f"[卡拉彼丘·超弦体排行] 解析角色参数失败：{exc}")
             await bot.send(str(exc))
             return
 
@@ -94,11 +94,11 @@ def register_role_board_ranking(sv_ranking: SV) -> None:
         try:
             image = await build_role_board_ranking_card(role_id, role_name)
         except DakanuError as exc:
-            logger.warning(f"[卡拉彼丘·角色排行] 获取角色排行失败：{exc}")
+            logger.warning(f"[卡拉彼丘·超弦体排行] 获取超弦体排行失败：{exc}")
             await bot.send(str(exc))
             return
         except RuntimeError:
-            logger.exception("[卡拉彼丘·角色排行] 渲染卡片失败")
-            await bot.send("角色排行卡片生成失败，请稍后再试。")
+            logger.exception("[卡拉彼丘·超弦体排行] 渲染卡片失败")
+            await bot.send("超弦体排行卡片生成失败，请稍后再试。")
             return
         await bot.send(image)
