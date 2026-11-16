@@ -153,6 +153,15 @@
         "desc": "玩家活跃趋势与世界频道动态",
         "data": [
             {
+                "name": "活动",
+                "desc": "查看当前进行中的活动时间轴",
+                "eg": "活动",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "活跃图",
                 "desc": "查看玩家活跃趋势卡片，支持 6h/24h/7d/30d",
                 "eg": "活跃图",

@@ -3,9 +3,10 @@
 import base64
 from pathlib import Path
 
-from ..utils.paths import ASSET_DIR
+from ..utils.paths import DATA_DIR, ASSET_DIR
 
 _IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg", ".gif")
+_BUNDLED_BANNER_BG = Path(__file__).resolve().parents[2] / "calabiyau_help" / "texture2d" / "banner_bg.jpg"
 
 
 def _existing_image(path: Path) -> Path | None:
@@ -108,6 +109,15 @@ def local_faction_image(camp_code: int) -> Path | None:
 def local_position_icon(position_code: int) -> Path | None:
     path = ASSET_DIR / "factions" / f"position-{position_code}.svg"
     return _existing_image(path)
+
+
+def local_banner_bg_image() -> Path | None:
+    """优先读取 data 下热更新后的 banner_bg，缺失时回退插件内置底图。"""
+    synced_path = DATA_DIR / "help" / "texture2d" / "banner_bg.jpg"
+    found = _existing_image(synced_path)
+    if found is not None:
+        return found
+    return _existing_image(_BUNDLED_BANNER_BG)
 
 
 def image_data_uri(content: bytes, suffix: str) -> str:

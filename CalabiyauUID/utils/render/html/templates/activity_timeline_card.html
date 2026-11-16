@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卡拉彼丘 · 活动时间轴</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  color: #f8fafc;
+  background: #0d1320;
+}
+.canvas {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #0d1320;
+  padding: 26px 28px 18px;
+}
+.bg-img {
+  position: absolute;
+  left: -24px;
+  top: -24px;
+  width: calc(100% + 48px);
+  height: calc(100% + 48px);
+  object-fit: cover;
+  object-position: center;
+  filter: blur(14px);
+  opacity: 0.78;
+}
+.bg-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(11, 17, 30, 0.52) 0%, rgba(11, 17, 30, 0.68) 100%);
+}
+.inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+.subtitle {
+  font-size: 12.5px;
+  color: rgba(226, 232, 240, 0.82);
+  font-family: "Mono", Consolas, monospace;
+}
+.axis-top {
+  position: relative;
+  height: 24px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.tick-label {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.86);
+  font-family: "Mono", Consolas, monospace;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.tick-label.is-start {
+  transform: translateX(0);
+}
+.tick-label.is-end {
+  transform: translateX(-100%);
+}
+.axis-bottom {
+  position: relative;
+  height: 24px;
+  margin-top: -6px;
+}
+.timeline-board {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+.grid-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed rgba(255, 255, 255, 0.16);
+  z-index: 1;
+}
+.now-line {
+  position: absolute;
+  top: 0;
+  bottom: -8px;
+  width: 1px;
+  background: rgba(203, 213, 225, 0.78);
+  z-index: 5;
+}
+.now-tag {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(75, 85, 99, 0.92);
+  border: 1px solid rgba(209, 213, 219, 0.42);
+  color: #f3f4f6;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-family: "Mono", Consolas, monospace;
+}
+.lane-row {
+  position: relative;
+  height: 68px;
+  z-index: 2;
+}
+.bar-wrap {
+  position: absolute;
+  top: 0;
+  height: 68px;
+  border-radius: 0;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  background: #121928;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
+}
+.bar-wrap.is-urgent {
+  border-color: rgba(251, 191, 36, 0.88);
+}
+.bar-bg {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+.bar-wrap.is-wide .bar-bg {
+  width: 580px;
+  right: 0;
+}
+.bar-scrim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(18, 25, 40, 0.95) 0%, rgba(18, 25, 40, 0.82) 44%, rgba(18, 25, 40, 0.30) 78%, rgba(18, 25, 40, 0.14) 100%);
+}
+.bar-wrap.is-wide .bar-scrim {
+  background: linear-gradient(90deg, #121928 0%, #121928 38%, rgba(18, 25, 40, 0.88) 48%, rgba(18, 25, 40, 0.24) 78%, rgba(18, 25, 40, 0.10) 100%);
+}
+.bar-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 11px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.bar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.bar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+.bar-rem {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(203, 213, 225, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+}
+.is-urgent .bar-rem {
+  color: #fcd34d;
+}
+.bar-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(241, 245, 249, 0.95);
+  font-family: "Mono", Consolas, monospace;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.empty-box {
+  padding: 36px 16px;
+  text-align: center;
+  font-size: 15px;
+  color: rgba(226, 232, 240, 0.86);
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.footer {
+  text-align: center;
+  font-size: 11.5px;
+  color: rgba(226, 232, 240, 0.72);
+  padding-top: 2px;
+}
+</style>
+</head>
+<body>
+<div class="canvas">
+  {% if data.banner_bg_uri %}
+  <img class="bg-img" src="{{ data.banner_bg_uri }}" alt="" />
+  {% endif %}
+  <div class="bg-overlay"></div>
+  <div class="inner">
+    <div class="meta-bar">
+      <div class="subtitle">统计时间：{{ data.now_text }}</div>
+    </div>
+    {% if data.bars %}
+    <div class="axis-top">
+      {% for tick in data.ticks %}
+      <div class="tick-label {{ tick.align_cls }}" style="left: {{ tick.left_pct }}%;">{{ tick.label }}</div>
+      {% endfor %}
+    </div>
+    <div class="timeline-board">
+      {% for tick in data.ticks %}
+      <div class="grid-v" style="left: {{ tick.left_pct }}%;"></div>
+      {% endfor %}
+      {% if data.show_now_line %}
+      <div class="now-line" style="left: {{ data.now_pct }}%;"></div>
+      {% endif %}
+      {% for bar in data.bars %}
+      <div class="lane-row">
+        <div class="bar-wrap{% if bar.is_urgent %} is-urgent{% endif %}{% if bar.is_wide %} is-wide{% endif %}" style="left: {{ bar.left_pct }}%; width: {{ bar.width_pct }}%;">
+          {% if bar.image_uri %}
+          <img class="bar-bg" src="{{ bar.image_uri }}" alt="" />
+          {% endif %}
+          <div class="bar-scrim"></div>
+          <div class="bar-content">
+            <div class="bar-title">{{ bar.title }}</div>
+            <div class="bar-bottom">
+              <span class="bar-date">{{ bar.date_text }}</span>
+              <span class="bar-rem">{{ bar.rem_text }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if data.show_now_line %}
+    <div class="axis-bottom">
+      <div class="now-tag" style="left: {{ data.now_pct }}%;">{{ data.today_label }}</div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-box">当前暂无进行中的活动</div>
+    {% endif %}
+    <div class="footer">{{ data.footer_text }}</div>
+  </div>
+</div>
+</body>
+</html>
