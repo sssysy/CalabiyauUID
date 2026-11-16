@@ -1,0 +1,148 @@
+{
+    "账号绑定": {
+        "desc": "卡拉彼丘国服账号绑定与查看",
+        "data": [
+            {
+                "name": "绑定账号",
+                "desc": "绑定卡拉彼丘国服账号并拉取首次战绩",
+                "eg": "绑定1234567",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "解绑账号",
+                "desc": "解绑已绑定的卡拉彼丘账号",
+                "eg": "解绑1234567",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "查看绑定",
+                "desc": "查看当前已绑定的卡拉彼丘账号",
+                "eg": "查看",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            }
+        ]
+    },
+    "战绩查询": {
+        "desc": "生涯总览、历史对局与数据刷新",
+        "data": [
+            {
+                "name": "战绩总览",
+                "desc": "查看指定或当前绑定账号的生涯战绩总览卡片",
+                "eg": "战绩总览1234567",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "历史战绩",
+                "desc": "查看当前绑定账号最近 8 场对局卡片",
+                "eg": "历史战绩",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "刷新数据",
+                "desc": "从战绩站点重新拉取最新玩家缓存",
+                "eg": "刷新数据1234567",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            }
+        ]
+    },
+    "排行查询": {
+        "desc": "各类模式榜单与排行",
+        "data": [
+            {
+                "name": "排位排行",
+                "desc": "查看当前赛季排位段位榜前 50 名",
+                "eg": "排位排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "团竟排行",
+                "desc": "查看团队乱斗榜前 50 名",
+                "eg": "团队排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "推车排行",
+                "desc": "查看极限推进榜前 50 名",
+                "eg": "推进排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "匹配排行",
+                "desc": "查看挑战榜前 50 名",
+                "eg": "挑战排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "生化排行",
+                "desc": "查看晶源感染榜前 50 名",
+                "eg": "感染排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "角色排行",
+                "desc": "支持 角色[排位|全部][出场率|胜率]排行",
+                "eg": "角色排位胜率排行",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "超弦体排行",
+                "desc": "查看指定角色名或角色 ID 的单榜前 50 名",
+                "eg": "超弦体排行千代",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            }
+        ]
+    },
+    "其他": {
+        "desc": "插件帮助与说明",
+        "data": [
+            {
+                "name": "帮助",
+                "desc": "显示 CalabiyauUID 插件帮助图",
+                "eg": "帮助",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            }
+        ]
+    }
+}

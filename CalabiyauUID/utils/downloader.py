@@ -4,6 +4,8 @@ import hashlib
 from pathlib import Path
 from collections.abc import Sequence
 
+import httpx
+
 from gsuid_core.utils.download_resource.download_file import download as download_file
 
 from .utils.paths import DATA_DIR
@@ -54,3 +56,22 @@ async def download_images(urls: Sequence[str]) -> list[Path | None]:
     for url in urls:
         paths.append(await download_image(url))
     return paths
+
+
+async def download_to_dir(
+    url: str,
+    target_dir: Path,
+    filename: str,
+    *,
+    tag: str = "[卡拉彼丘·资源下载]",
+) -> Path | None:
+    """复用框架下载器把远程文件写入指定目录；失败返回 None。"""
+    if not url or not filename:
+        return None
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / filename
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        retcode = await download_file(url, target_dir, filename, sess=client, tag=tag)
+    if retcode != 200 or not target.is_file() or target.stat().st_size <= 0:
+        return None
+    return target
