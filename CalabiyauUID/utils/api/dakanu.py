@@ -284,6 +284,79 @@ class DakanuFavoriteMode(TypedDict):
     label: str
 
 
+class DakanuActivityPoint(TypedDict):
+    at: int
+    index: float
+
+
+class DakanuActivityEstimatePoint(TypedDict):
+    at: int
+    floor: int
+    gap: int
+    channel: int
+    daily: int
+    completePlayers: int
+    completeSeats: int
+    partialRooms: int
+    coverage: float
+    active30d: int
+
+
+class DakanuActivityEstimate(TypedDict):
+    updatedAt: int
+    points: list[DakanuActivityEstimatePoint]
+
+
+class DakanuGameActivity(TypedDict):
+    ok: bool
+    range: str
+    intervalSeconds: int
+    updatedAt: int
+    sparse: bool
+    region: str
+    estimate: DakanuActivityEstimate
+    points: list[DakanuActivityPoint]
+
+
+class DakanuChatSelection(TypedDict):
+    channel: int | None
+    population: int | None
+    reason: str | None
+
+
+class DakanuChatScope(TypedDict):
+    include_empty: bool
+    channel_count: int
+    active_channels: int
+    requested_channels: int
+    selected_channels: int
+
+
+class DakanuChatMessage(TypedDict):
+    channel: int
+    player_id: str
+    nick: str
+    message: str
+    sent_at: int
+    icon: int | None
+    icon_frame: int | None
+    vc_border_id: int | None
+    bubble_id: int | None
+    level: int | None
+    target_id: str | None
+
+
+class DakanuChatAggregate(TypedDict):
+    ok: bool
+    generated_at: int
+    scope: DakanuChatScope
+    strategy: str
+    selection: DakanuChatSelection
+    messages: list[DakanuChatMessage]
+    count: int
+    elapsed_seconds: float
+
+
 class DakanuLeisure(TypedDict, total=False):
     score: int
     segment: int
@@ -344,6 +417,12 @@ def tier_image_url(tier_index: int) -> str:
 def challenge_tier_image_url(tier_index: int) -> str:
     """按挑战赛段位编号返回站点图标地址。"""
     return f"{BASE_URL}/challenge-rank/tier-{tier_index}.png" if 1 <= tier_index <= 9 else ""
+
+
+def chat_emote_image_url(emote_id: str) -> str:
+    """按聊天表情 ID 返回站点表情地址。"""
+    cleaned = emote_id.strip().lstrip("#")
+    return f"{BASE_URL}/chat-emotes/{cleaned}.webp" if cleaned.isascii() and cleaned.isdigit() else ""
 
 
 class DakanuError(Exception):
@@ -1207,3 +1286,274 @@ async def search_players(query: str) -> list[DakanuPlayerSuggestion]:
     if not cleaned:
         return []
     return await _fetch_search_players_sync(cleaned)
+
+
+_GAME_ACTIVITY_RANGES = frozenset({"6h", "24h", "7d", "30d"})
+
+
+def _request_json_get(
+    path: str,
+    params: dict[str, str] | dict[str, int],
+    *,
+    log_tag: str,
+    label: str,
+) -> object:
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}{path}", params=params)
+    except httpx.HTTPError as exc:
+        logger.warning(f"{log_tag} 请求{label}失败：{exc}")
+        raise DakanuError(f"请求{label}失败，请稍后再试。") from None
+    if response.status_code in {204, 404}:
+        raise DakanuError(f"暂无{label}数据，请稍后再试。")
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError(f"战绩站暂时无法读取{label}，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"{log_tag} 读取{label}返回 HTTP {response.status_code}")
+        raise DakanuError(f"读取{label}失败，请稍后再试。")
+    try:
+        return response.json()
+    except ValueError:
+        logger.warning(f"{log_tag} {label}返回非 JSON 响应")
+        raise DakanuError(f"{label}数据格式异常，请稍后再试。") from None
+
+
+def _parse_activity_point(raw: object) -> DakanuActivityPoint | None:
+    if not isinstance(raw, dict):
+        return None
+    at = _opt_int(raw, "at")
+    index_val = _opt_float(raw, "index")
+    if at is None or index_val is None:
+        return None
+    return {"at": at, "index": index_val}
+
+
+def _parse_activity_estimate_point(raw: object) -> DakanuActivityEstimatePoint | None:
+    if not isinstance(raw, dict):
+        return None
+    at = _opt_int(raw, "at")
+    floor_val = _opt_int(raw, "floor")
+    gap = _opt_int(raw, "gap")
+    channel = _opt_int(raw, "channel")
+    daily = _opt_int(raw, "daily")
+    complete_players = _opt_int(raw, "completePlayers")
+    complete_seats = _opt_int(raw, "completeSeats")
+    partial_rooms = _opt_int(raw, "partialRooms")
+    coverage = _opt_float(raw, "coverage")
+    active_30d = _opt_int(raw, "active30d")
+    if (
+        at is None
+        or floor_val is None
+        or gap is None
+        or channel is None
+        or daily is None
+        or complete_players is None
+        or complete_seats is None
+        or partial_rooms is None
+        or coverage is None
+        or active_30d is None
+    ):
+        return None
+    return {
+        "at": at,
+        "floor": floor_val,
+        "gap": gap,
+        "channel": channel,
+        "daily": daily,
+        "completePlayers": complete_players,
+        "completeSeats": complete_seats,
+        "partialRooms": partial_rooms,
+        "coverage": coverage,
+        "active30d": active_30d,
+    }
+
+
+def _parse_game_activity(payload: object) -> DakanuGameActivity | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    range_val = _opt_str(payload, "range")
+    interval_seconds = _opt_int(payload, "intervalSeconds")
+    updated_at = _opt_int(payload, "updatedAt")
+    sparse = _opt_bool(payload, "sparse")
+    region = _opt_str(payload, "region")
+    raw_estimate = payload["estimate"] if "estimate" in payload else None
+    raw_points = payload["points"] if "points" in payload else None
+    if (
+        range_val is None
+        or interval_seconds is None
+        or updated_at is None
+        or sparse is None
+        or region is None
+        or not isinstance(raw_estimate, dict)
+        or not isinstance(raw_points, list)
+    ):
+        return None
+    est_updated_at = _opt_int(raw_estimate, "updatedAt")
+    raw_est_points = raw_estimate["points"] if "points" in raw_estimate else None
+    if est_updated_at is None or not isinstance(raw_est_points, list):
+        return None
+    est_points: list[DakanuActivityEstimatePoint] = []
+    for item in raw_est_points:
+        parsed_est = _parse_activity_estimate_point(item)
+        if parsed_est is not None:
+            est_points.append(parsed_est)
+    points: list[DakanuActivityPoint] = []
+    for item in raw_points:
+        parsed_pt = _parse_activity_point(item)
+        if parsed_pt is not None:
+            points.append(parsed_pt)
+    return {
+        "ok": True,
+        "range": range_val,
+        "intervalSeconds": interval_seconds,
+        "updatedAt": updated_at,
+        "sparse": sparse,
+        "region": region,
+        "estimate": {"updatedAt": est_updated_at, "points": est_points},
+        "points": points,
+    }
+
+
+@to_thread
+def _fetch_game_activity_sync(range_key: str) -> DakanuGameActivity:
+    payload = _request_json_get(
+        "/api/activity/game",
+        {"range": range_key},
+        log_tag="[卡拉彼丘·活跃趋势]",
+        label="玩家活跃趋势",
+    )
+    activity = _parse_game_activity(payload)
+    if activity is None:
+        logger.warning("[卡拉彼丘·活跃趋势] 接口响应结构异常")
+        raise DakanuError("玩家活跃趋势数据格式异常，请稍后再试。")
+    return activity
+
+
+async def fetch_game_activity(range_key: str = "24h") -> DakanuGameActivity:
+    """读取 Dakanu 玩家活跃趋势数据。"""
+    if range_key not in _GAME_ACTIVITY_RANGES:
+        raise ValueError(f"不支持的活跃范围：{range_key}")
+    return await _fetch_game_activity_sync(range_key)
+
+
+def _parse_chat_message(raw: object) -> DakanuChatMessage | None:
+    if not isinstance(raw, dict):
+        return None
+    channel = _opt_int(raw, "channel")
+    player_id = _opt_str(raw, "player_id")
+    nick = _opt_str(raw, "nick")
+    message = _opt_str(raw, "message")
+    sent_at = _opt_int(raw, "sent_at")
+    if (
+        channel is None
+        or player_id is None
+        or nick is None
+        or message is None
+        or sent_at is None
+    ):
+        return None
+    return {
+        "channel": channel,
+        "player_id": player_id,
+        "nick": nick,
+        "message": message,
+        "sent_at": sent_at,
+        "icon": _opt_int(raw, "icon"),
+        "icon_frame": _opt_int(raw, "icon_frame"),
+        "vc_border_id": _opt_int(raw, "vc_border_id"),
+        "bubble_id": _opt_int(raw, "bubble_id"),
+        "level": _opt_int(raw, "level"),
+        "target_id": _opt_str(raw, "target_id"),
+    }
+
+
+def _parse_chat_scope(raw: object) -> DakanuChatScope | None:
+    if not isinstance(raw, dict):
+        return None
+    include_empty = _opt_bool(raw, "include_empty")
+    channel_count = _opt_int(raw, "channel_count")
+    active_channels = _opt_int(raw, "active_channels")
+    requested_channels = _opt_int(raw, "requested_channels")
+    selected_channels = _opt_int(raw, "selected_channels")
+    if (
+        include_empty is None
+        or channel_count is None
+        or active_channels is None
+        or requested_channels is None
+        or selected_channels is None
+    ):
+        return None
+    return {
+        "include_empty": include_empty,
+        "channel_count": channel_count,
+        "active_channels": active_channels,
+        "requested_channels": requested_channels,
+        "selected_channels": selected_channels,
+    }
+
+
+def _parse_chat_aggregate(payload: object) -> DakanuChatAggregate | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    generated_at = _opt_int(payload, "generated_at")
+    strategy = _opt_str(payload, "strategy")
+    count = _opt_int(payload, "count")
+    elapsed_seconds = _opt_float(payload, "elapsed_seconds")
+    raw_scope = payload["scope"] if "scope" in payload else None
+    raw_selection = payload["selection"] if "selection" in payload else None
+    raw_messages = payload["messages"] if "messages" in payload else None
+    scope = _parse_chat_scope(raw_scope)
+    if (
+        generated_at is None
+        or scope is None
+        or strategy is None
+        or count is None
+        or elapsed_seconds is None
+        or not isinstance(raw_selection, dict)
+        or not isinstance(raw_messages, list)
+    ):
+        return None
+    sel_channel = _opt_int(raw_selection, "channel")
+    sel_population = _opt_int(raw_selection, "population")
+    sel_reason = _opt_str(raw_selection, "reason")
+    messages: list[DakanuChatMessage] = []
+    for item in raw_messages:
+        parsed = _parse_chat_message(item)
+        if parsed is not None:
+            messages.append(parsed)
+    return {
+        "ok": True,
+        "generated_at": generated_at,
+        "scope": scope,
+        "strategy": strategy,
+        "selection": {
+            "channel": sel_channel,
+            "population": sel_population,
+            "reason": sel_reason,
+        },
+        "messages": messages,
+        "count": count,
+        "elapsed_seconds": elapsed_seconds,
+    }
+
+
+@to_thread
+def _fetch_chat_aggregate_sync(limit_per_channel: int) -> DakanuChatAggregate:
+    payload = _request_json_get(
+        "/api/chat/messages/aggregate",
+        {"limit_per_channel": limit_per_channel},
+        log_tag="[卡拉彼丘·世界聊天]",
+        label="世界频道动态",
+    )
+    aggregate = _parse_chat_aggregate(payload)
+    if aggregate is None:
+        logger.warning("[卡拉彼丘·世界聊天] 接口响应结构异常")
+        raise DakanuError("世界频道动态数据格式异常，请稍后再试。")
+    return aggregate
+
+
+async def fetch_chat_aggregate(limit_per_channel: int = 30) -> DakanuChatAggregate:
+    """读取 Dakanu 世界频道聚合消息。"""
+    return await _fetch_chat_aggregate_sync(limit_per_channel)

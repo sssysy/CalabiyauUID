@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卡拉彼丘 · 世界频道动态</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background: #eceff4;
+}
+.card {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(22, 26, 33, .09);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+}
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e05a2b;
+  box-shadow: 0 0 0 4px rgba(224, 90, 43, .16);
+}
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #172033;
+}
+.head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meta-pill {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #f3f5f8;
+  border: 1px solid rgba(22, 26, 33, .08);
+  font-size: 12px;
+  color: #5b677a;
+}
+.meta-pill strong {
+  color: #172033;
+  font-family: "Mono", Consolas, monospace;
+}
+.feed {
+  padding: 8px 22px 14px;
+}
+.msg-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+.msg-row:last-child {
+  border-bottom: none;
+}
+.avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e2e8f0;
+  border: 1px solid rgba(22, 26, 33, .08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-fb {
+  font-size: 15px;
+  font-weight: 700;
+  color: #475569;
+}
+.msg-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.msg-nick {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.msg-lvl {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: "Mono", Consolas, monospace;
+}
+.msg-uid {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-family: "Mono", Consolas, monospace;
+}
+.msg-time {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-family: "Mono", Consolas, monospace;
+}
+.msg-bubble {
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e7ebf1;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #273348;
+  overflow-wrap: anywhere;
+}
+.emote-box {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+.emote-box img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.emote-fallback {
+  color: #64748b;
+  font-size: 12px;
+}
+.chat-card {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  padding: 12px 14px 12px 17px;
+  border-radius: 10px;
+  border: 1px solid #dce3ec;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow: hidden;
+}
+.card-accent-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #e05a2b;
+}
+.chat-card.is-player .card-accent-bar,
+.chat-card.is-clan .card-accent-bar {
+  background: #0d9488;
+}
+.card-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e05a2b;
+}
+.chat-card.is-player .card-eyebrow,
+.chat-card.is-clan .card-eyebrow {
+  color: #0d9488;
+}
+.card-msg-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172033;
+  overflow-wrap: anywhere;
+}
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #dce3ec;
+  font-size: 11.5px;
+  color: #475569;
+}
+.tag-accent {
+  border-color: rgba(224, 90, 43, .35);
+  color: #c2410c;
+  background: #fff7ed;
+}
+.card-status {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #16a34a;
+}
+.card-status.is-closed {
+  color: #94a3b8;
+}
+.team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+.team-count {
+  font-size: 12px;
+  color: #64748b;
+}
+.team-count strong {
+  color: #172033;
+  font-family: "Mono", Consolas, monospace;
+}
+.seats {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.seat {
+  width: 18px;
+  height: 6px;
+  border-radius: 3px;
+  background: #cbd5e1;
+}
+.seat.is-filled {
+  background: #e05a2b;
+}
+.metrics-row {
+  display: flex;
+  gap: 8px;
+}
+.metric-cell {
+  flex: 1;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.metric-cell span {
+  font-size: 10.5px;
+  color: #64748b;
+}
+.metric-cell strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+}
+.card-roles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #dce3ec;
+  font-size: 11px;
+  color: #334155;
+}
+.role-ico {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-block;
+}
+.role-ico img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.empty-box {
+  padding: 48px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+.footer {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #7c8799;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="card-head">
+      <div class="head-left">
+        <div class="live-dot"></div>
+        <div class="card-title">卡拉彼丘 · 世界频道动态</div>
+      </div>
+      <div class="head-meta">
+        <div class="meta-pill"><strong>{{ data.population_text }}</strong> 人</div>
+      </div>
+    </div>
+    <div class="feed">
+      {% if data.rows %}
+        {% for row in data.rows %}
+        <div class="msg-row">
+          <div class="avatar">
+            {% if row.avatar_uri %}
+            <img src="{{ row.avatar_uri }}" alt="">
+            {% else %}
+            <span class="avatar-fb">{{ row.initial }}</span>
+            {% endif %}
+          </div>
+          <div class="msg-main">
+            <div class="msg-head">
+              <span class="msg-nick">{{ row.nickname }}</span>
+              {% if row.level_text %}
+              <span class="msg-lvl">{{ row.level_text }}</span>
+              {% endif %}
+              <span class="msg-uid">#{{ row.player_id }}</span>
+              <span class="msg-time">{{ row.sent_time }}</span>
+            </div>
+            {% if row.card_kind == "team" and row.team_card %}
+            <div class="chat-card is-team">
+              <div class="card-accent-bar"></div>
+              <div class="card-eyebrow">组队招募</div>
+              <div class="card-msg-title">{{ row.team_card.title }}</div>
+              <div class="card-tags">
+                <span class="tag tag-accent">{{ row.team_card.mode_label }}</span>
+                {% if row.team_card.score_limit %}
+                <span class="tag">{{ row.team_card.score_limit }}</span>
+                {% endif %}
+                {% if row.team_card.status_label %}
+                <span class="card-status{% if row.team_card.is_closed %} is-closed{% endif %}">● {{ row.team_card.status_label }}</span>
+                {% endif %}
+              </div>
+              {% if row.team_card.has_seats %}
+              <div class="team-row">
+                <span class="team-count">队伍人数 <strong>{{ row.team_card.seats_text }}</strong></span>
+                <div class="seats">
+                  {% for seat in row.team_card.seats %}
+                  <span class="seat{% if seat.filled %} is-filled{% endif %}"></span>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            </div>
+            {% elif row.card_kind == "player" and row.player_card %}
+            <div class="chat-card is-player">
+              <div class="card-accent-bar"></div>
+              <div class="card-eyebrow">玩家名片</div>
+              <div class="card-msg-title">{{ row.player_card.title }}</div>
+              {% if row.player_card.tags %}
+              <div class="card-tags">
+                {% for tag in row.player_card.tags %}
+                <span class="tag">{{ tag }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if row.player_card.metrics %}
+              <div class="metrics-row">
+                {% for cell in row.player_card.metrics %}
+                <div class="metric-cell"><span>{{ cell.label }}</span><strong>{{ cell.value }}</strong></div>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if row.player_card.roles %}
+              <div class="card-roles">
+                {% for chip in row.player_card.roles %}
+                <span class="role-pill">{% if chip.uri %}<span class="role-ico"><img src="{{ chip.uri }}" alt=""></span>{% endif %}<span>{{ chip.label }}</span></span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% elif row.card_kind == "clan" and row.clan_card %}
+            <div class="chat-card is-clan">
+              <div class="card-accent-bar"></div>
+              <div class="card-eyebrow">战队招募</div>
+              <div class="card-msg-title">{{ row.clan_card.clan_name }}</div>
+              {% if row.clan_card.clan_id %}
+              <div class="card-tags"><span class="tag">战队 ID {{ row.clan_card.clan_id }}</span></div>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="msg-bubble">
+              {% for part in row.text_parts %}
+                {% if part.kind == "emote" %}
+                <span class="emote-box"><img src="{{ part.uri }}" alt=""></span>
+                {% elif part.kind == "emote_fallback" %}
+                <span class="emote-fallback">{{ part.text }}</span>
+                {% else %}
+                <span>{{ part.text }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-box">暂无世界频道动态</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

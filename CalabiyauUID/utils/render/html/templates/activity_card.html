@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卡拉彼丘 · 玩家活跃趋势</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.wrap {
+  width: 100%;
+  padding: 16px;
+  background: #eceff4;
+}
+.card {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(22, 26, 33, .09);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+}
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #17a34a;
+  box-shadow: 0 0 0 4px rgba(23, 163, 74, .16);
+}
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #172033;
+}
+.head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meta-pill {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #f3f5f8;
+  border: 1px solid rgba(22, 26, 33, .08);
+  font-size: 12px;
+  color: #5b677a;
+}
+.meta-pill strong {
+  color: #172033;
+  font-family: "Mono", Consolas, monospace;
+}
+.kpi-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  background: #fafbfd;
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+}
+.kpi-box {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+.kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.kpi-value {
+  margin-top: 4px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #dc2626;
+  font-family: "Mono", Consolas, monospace;
+}
+.kpi-box.is-green .kpi-value {
+  color: #16a34a;
+}
+.chart-section {
+  padding: 14px 20px 16px;
+}
+.chart-box {
+  width: 100%;
+  padding: 10px 10px 6px;
+  border-radius: 12px;
+  border: 1px solid #e7ebf1;
+  background: #fcfdff;
+}
+.chart-canvas {
+  position: relative;
+  width: 100%;
+}
+.x-tick-lbl {
+  position: absolute;
+  width: 72px;
+  height: 14px;
+  margin-left: -36px;
+  margin-top: -7px;
+  font-size: 10.5px;
+  line-height: 14px;
+  text-align: right;
+  color: #64748b;
+  white-space: nowrap;
+  transform: rotate(-45deg);
+}
+.callout-badge {
+  position: absolute;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .08);
+}
+.callout-badge.is-max {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+}
+.callout-badge.is-min {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #16a34a;
+}
+.empty-box {
+  padding: 48px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+.footer {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #7c8799;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="card-head">
+      <div class="head-left">
+        <div class="live-dot"></div>
+        <div class="card-title">卡拉彼丘 · 玩家活跃趋势</div>
+      </div>
+      <div class="head-meta">
+        <div class="meta-pill">范围 <strong>{{ data.range_label }}</strong></div>
+        <div class="meta-pill">区服 <strong>{{ data.region_label }}</strong></div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-box">
+        <div class="kpi-label">当前活跃</div>
+        <div class="kpi-value">{{ data.daily_text }}</div>
+      </div>
+      <div class="kpi-box is-green">
+        <div class="kpi-label">近期活跃</div>
+        <div class="kpi-value">{{ data.active30_text }}</div>
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-box">
+        {% if data.has_points %}
+        <div class="chart-canvas">
+          <svg viewBox="0 0 {{ data.chart_width }} {{ data.chart_height }}" width="{{ data.chart_width }}" height="{{ data.chart_height }}">
+            <line x1="{{ data.pad_left }}" y1="{{ data.pad_top }}" x2="{{ data.pad_left }}" y2="{{ data.axis_y }}" stroke="#cbd5e1" stroke-width="1.2" />
+            <line x1="{{ data.pad_left }}" y1="{{ data.axis_y }}" x2="{{ data.plot_right }}" y2="{{ data.axis_y }}" stroke="#cbd5e1" stroke-width="1.2" />
+            {% for line in data.grid_lines %}
+            <line x1="{{ data.pad_left }}" y1="{{ line.y }}" x2="{{ data.plot_right }}" y2="{{ line.y }}" stroke="#e6ebf2" stroke-width="1" />
+            <text x="56.0" y="{{ line.label_y }}" text-anchor="end" font-size="12" fill="#7c8799">{{ line.label }}</text>
+            {% endfor %}
+            {% for tick in data.x_ticks %}
+            <line x1="{{ tick.x }}" y1="{{ tick.y1 }}" x2="{{ tick.x }}" y2="{{ tick.y2 }}" stroke="#cbd5e1" stroke-width="1" />
+            {% endfor %}
+            <text x="{{ data.pad_left }}" y="18" text-anchor="start" font-size="11.5" fill="#8994a6">活跃指数 (0-100)</text>
+            <polygon points="{{ data.area_points }}" fill="rgba(224, 90, 43, 0.12)" />
+            <polyline points="{{ data.line_points }}" fill="none" stroke="#e05a2b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            {% for dot in data.dots %}
+            <circle cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="3.5" fill="#ffffff" stroke="#e05a2b" stroke-width="2" />
+            {% endfor %}
+            {% if data.max_extrema %}
+            <line x1="{{ data.pad_left }}" y1="{{ data.max_extrema.line_y }}" x2="{{ data.plot_right }}" y2="{{ data.max_extrema.line_y }}" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6 4" />
+            <circle cx="{{ data.max_extrema.cx }}" cy="{{ data.max_extrema.cy }}" r="5.5" fill="#dc2626" stroke="#ffffff" stroke-width="2" />
+            {% endif %}
+            {% if data.min_extrema %}
+            <line x1="{{ data.pad_left }}" y1="{{ data.min_extrema.line_y }}" x2="{{ data.plot_right }}" y2="{{ data.min_extrema.line_y }}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6 4" />
+            <circle cx="{{ data.min_extrema.cx }}" cy="{{ data.min_extrema.cy }}" r="5.5" fill="#16a34a" stroke="#ffffff" stroke-width="2" />
+            {% endif %}
+          </svg>
+          {% for tick in data.x_ticks %}
+          <div class="x-tick-lbl" style="left:{{ tick.left_pct }}%;top:{{ tick.top_pct }}%;">{{ tick.label }}</div>
+          {% endfor %}
+          {% if data.max_extrema %}
+          <div class="callout-badge is-max" style="left:{{ data.max_extrema.badge_left_pct }}%;top:{{ data.max_extrema.badge_top_pct }}%;transform:translate({{ data.max_extrema.badge_tx }},0);">{{ data.max_extrema.badge_text }}</div>
+          {% endif %}
+          {% if data.min_extrema %}
+          <div class="callout-badge is-min" style="left:{{ data.min_extrema.badge_left_pct }}%;top:{{ data.min_extrema.badge_top_pct }}%;transform:translate({{ data.min_extrema.badge_tx }},0);">{{ data.min_extrema.badge_text }}</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="empty-box">暂无活跃趋势数据</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

@@ -36,6 +36,14 @@ def local_avatar_image(avatar_id: int) -> Path | None:
     return _local_id_image("avatars", avatar_id)
 
 
+def local_chat_emote_image(emote_id: str) -> Path | None:
+    """按聊天表情 ID 查找本地表情。"""
+    cleaned = emote_id.strip().lstrip("#")
+    if not cleaned.isascii() or not cleaned.isdigit():
+        return None
+    return _image_with_suffix(ASSET_DIR / "chat-emotes" / cleaned)
+
+
 def local_baseplate_image(avatar_id: int) -> Path | None:
     """头像底图与头像共用 avatarId。"""
     return _local_id_image("baseplates-lg", avatar_id)

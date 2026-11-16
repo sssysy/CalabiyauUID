@@ -24,9 +24,6 @@
 >
 > 🚧 项目快速迭代中，有漏洞可提issue或pr 🚧
 
-> [!CAUTION]
-> 项目还在早期开发阶段，部分功能可能报错或不可用！如遇到请等待后续更新
-
 ## 丨命令列表
 
 <details><summary>绑定登录</summary>
@@ -40,6 +37,7 @@
 | `kq战绩总览` | 查看当前账号的生涯总览卡片 |
 | `kq战绩总览 1234567` | 查看指定 UID 的生涯总览卡片 |
 | `kq历史战绩` | 查看当前账号最近 8 场对局 |
+</details>
 
 <details><summary>排行查询</summary>
 
@@ -59,6 +57,7 @@
 
 - 本项目仅供学习使用，请勿用于商业用途
 - [GPL-3.0 License](LICENSE)
+- 若 issue 回复不及时，请进群 [929275476](https://qm.qq.com/cgi-bin/qm/qr?k=d1oNQ1wePPbCkhPbP3vZN-DsXDD0hG61&authKey=0PdxKz%2BMbWgy7kwcF9OB%2B%2BrgOWKuREFG6tgJuWpr%2BzN8gtBTlGR6wDbk6N0W3bL1&noverify=0&group_code=929275476) @我
 
 ## 致谢
 | 贡献者 | 引用 |

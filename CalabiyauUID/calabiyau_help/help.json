@@ -131,6 +131,29 @@
             }
         ]
     },
+    "社区动态": {
+        "desc": "玩家活跃趋势与世界频道动态",
+        "data": [
+            {
+                "name": "活跃图",
+                "desc": "查看玩家活跃趋势卡片，支持 6h/24h/7d/30d",
+                "eg": "活跃图",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "世界聊天",
+                "desc": "查看世界频道最新 25 条实时动态",
+                "eg": "世界聊天",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            }
+        ]
+    },
     "其他": {
         "desc": "插件帮助与说明",
         "data": [
