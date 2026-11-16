@@ -12,7 +12,7 @@ from ..utils.helper.refresh import track_background
 sv_refresh = SV("卡拉彼丘数据刷新")
 
 
-@sv_refresh.on_command("刷新数据", block=True)
+@sv_refresh.on_command(("刷新数据", "更新数据"), block=True)
 async def calabiyau_refresh_data(bot: Bot, ev: Event) -> None:
     player_id, error = await resolve_refresh_uid(ev)
     if error is not None:

@@ -3,8 +3,8 @@
 from datetime import datetime
 from dataclasses import dataclass
 
-from .render import CardTemplateContext, render_card, render_template
-from ...api.dakanu import DakanuGameActivity
+from ..render import CardTemplateContext, render_card, render_template
+from ....api.dakanu import DakanuGameActivity
 
 _CHART_WIDTH = 920.0
 _CHART_HEIGHT = 336.0

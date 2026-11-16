@@ -17,6 +17,8 @@ T_CalabiyauActivityRemind = TypeVar(
 class CalabiyauActivityRemind(BaseIDModel, table=True):
     """记录已发送过 24 小时结束提醒的活动，防止重启或轮询重复推送。"""
 
+    __table_args__ = {"extend_existing": True}
+
     activity_key: str = Field(default="", unique=True, index=True, title="活动标识")
     end_at_ts: int = Field(default=0, title="活动结束时间戳")
     reminded_at_ts: int = Field(default=0, title="提醒发送时间戳")

@@ -1,5 +1,3 @@
-"""插件资源下载缓存。"""
-
 import hashlib
 from pathlib import Path
 from dataclasses import dataclass

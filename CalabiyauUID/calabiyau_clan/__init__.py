@@ -11,7 +11,7 @@ from ..utils.api.dakanu import DakanuError
 sv_clan = SV("卡拉彼丘战队")
 
 
-@sv_clan.on_command("战队", block=True)
+@sv_clan.on_command("战队查询", block=True)
 async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
     clan, error = await resolve_clan_target(ev)
     if error is not None or clan is None:

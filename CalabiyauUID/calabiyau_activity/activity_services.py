@@ -18,7 +18,7 @@ from ..utils.api.biligame_wiki import (
     fetch_ongoing_activities,
 )
 from ..utils.helper.activity_remind import sync_reminders_from_activities
-from ..utils.render.html.activity_timeline_card import render_activity_timeline_card
+from ..utils.render.html.renderer.activity_timeline_card import render_activity_timeline_card
 
 _CACHE_TTL_SECONDS = 300.0
 _DOWNLOAD_CONCURRENCY = 6

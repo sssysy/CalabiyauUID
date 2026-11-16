@@ -5,9 +5,9 @@ from datetime import datetime
 from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
-from .render import CardTemplateContext, render_card, render_template
-from ...api.dakanu import DakanuChatMessage, DakanuChatAggregate
+from ..render import CardTemplateContext, render_card, render_template
 from .summary_card import tier_display
+from ....api.dakanu import DakanuChatMessage, DakanuChatAggregate
 
 DEFAULT_WORLD_CHAT_LIMIT = 25
 

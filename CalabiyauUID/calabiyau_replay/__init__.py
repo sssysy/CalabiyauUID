@@ -16,7 +16,7 @@ from ..utils.api.dakanu import DakanuError
 sv_replay = SV("卡拉彼丘回放下载")
 
 
-@sv_replay.on_command("回放下载", block=True)
+@sv_replay.on_command(("回放下载", "下载回放", "下载录像"), block=True)
 async def calabiyau_replay_download(bot: Bot, ev: Event) -> None:
     room_id = parse_room_id(ev.text)
     if room_id is None:

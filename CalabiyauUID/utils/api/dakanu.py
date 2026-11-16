@@ -1,5 +1,3 @@
-"""Dakanu 公开读取接口。"""
-
 import re
 import time
 import asyncio

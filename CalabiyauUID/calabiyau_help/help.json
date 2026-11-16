@@ -82,7 +82,7 @@
             {
                 "name": "战队查询",
                 "desc": "查看指定战队或当前绑定账号所在战队信息",
-                "eg": "战队jmcomic",
+                "eg": "战队查询jmcomic",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,

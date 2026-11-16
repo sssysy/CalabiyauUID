@@ -3,8 +3,8 @@
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
-from .render import CardTemplateContext, render_card, render_template
-from ...api.biligame_wiki import WikiActivityItem
+from ..render import CardTemplateContext, render_card, render_template
+from ....api.biligame_wiki import WikiActivityItem
 
 _TICK_COUNT = 6
 _URGENT_DAYS = 3

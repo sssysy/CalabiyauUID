@@ -4,10 +4,10 @@ from datetime import datetime
 from dataclasses import dataclass
 from collections.abc import Mapping
 
-from .render import CARD_WIDTH, CardTemplateContext, render_card, render_template
-from ...api.dakanu import DakanuMatch, DakanuProfile, DakanuMatchPlayer
-from ...helper.maps import MapInfo, resolve_map
-from ...helper.recent_matches import MatchView
+from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
+from ....api.dakanu import DakanuMatch, DakanuProfile, DakanuMatchPlayer
+from ....helper.maps import MapInfo, resolve_map
+from ....helper.recent_matches import MatchView
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from collections.abc import Mapping
 
-from .render import CARD_WIDTH, CardTemplateContext, render_card, render_template
-from ...api.dakanu import DakanuRankingEntry, DakanuRankingFloor, DakanuRankingsBoard
+from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
 from .summary_card import tier_display, challenge_tier_display
+from ....api.dakanu import DakanuRankingEntry, DakanuRankingFloor, DakanuRankingsBoard
 
 
 @dataclass(frozen=True)

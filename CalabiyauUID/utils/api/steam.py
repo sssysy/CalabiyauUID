@@ -1,5 +1,3 @@
-"""SteamCMD 公开游戏资产查询接口。"""
-
 import re
 from dataclasses import dataclass
 

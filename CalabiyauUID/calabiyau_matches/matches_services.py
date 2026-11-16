@@ -13,7 +13,7 @@ from ..utils.helper.assets import image_data_uri, local_role_image, local_avatar
 from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.recent_matches import MatchView, load_recent_match_views
-from ..utils.render.html.matches_card import MatchCardAssets, render_matches_card
+from ..utils.render.html.renderer.matches_card import MatchCardAssets, render_matches_card
 
 _RECENT_LIMIT = 8
 

@@ -49,7 +49,7 @@ async def _bind_and_notify(bot: Bot, ev: Event, game_uid: str) -> None:
     await bot.send([MessageSegment.at(ev.user_id), MessageSegment.text(f" {message}")])
 
 
-@sv_bind.on_command("解绑", block=True)
+@sv_bind.on_command(("解绑", "解除绑定"), block=True)
 async def calabiyau_unbind(bot: Bot, ev: Event) -> None:
     query = ev.text.strip()
     if not query:

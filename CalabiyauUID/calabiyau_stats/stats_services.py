@@ -19,7 +19,7 @@ from ..utils.helper.refresh import refresh_player_data
 from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
-from ..utils.render.html.summary_card import (
+from ..utils.render.html.renderer.summary_card import (
     SummaryAssets,
     tier_index,
     render_summary_card,

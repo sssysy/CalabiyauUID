@@ -1,3 +1,10 @@
-"""CalabiyauUID 控制台配置注册。"""
+from gsuid_core.utils.plugins_config.gs_config import StringConfig
 
-from ..utils.helper.config import CalabiyauConfig  # noqa: F401
+from .config_default import CONFIG_DEFAULT
+from ..utils.utils.paths import CONFIG_PATH
+
+CalabiyauConfig = StringConfig(
+    "CalabiyauUID",
+    CONFIG_PATH,
+    CONFIG_DEFAULT,
+)

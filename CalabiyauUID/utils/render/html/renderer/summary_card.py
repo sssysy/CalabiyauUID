@@ -5,8 +5,8 @@ from datetime import datetime
 from dataclasses import field, dataclass
 from collections.abc import Mapping
 
-from .render import CARD_WIDTH, CardTemplateContext, render_card, render_template
-from ...api.dakanu import (
+from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
+from ....api.dakanu import (
     DakanuMode,
     DakanuRole,
     DakanuMatch,
@@ -18,7 +18,7 @@ from ...api.dakanu import (
     DakanuSummary,
     DakanuPresence,
 )
-from ...helper.maps import ROLE_POSITIONS, resolve_role_meta, get_role_display_names
+from ....helper.maps import ROLE_POSITIONS, resolve_role_meta, get_role_display_names
 
 _TREND_POINTS = 20
 _RECENT_FORM_LIMIT = 20

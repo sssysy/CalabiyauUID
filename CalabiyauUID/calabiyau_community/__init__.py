@@ -10,7 +10,6 @@ from .community_services import build_activity_card, build_world_chat_card
 
 sv_activity = SV("卡拉彼丘活跃")
 
-_ACTIVITY_PATTERN = r"^活跃图(?P<range>6h|24h|7d|30d|6小时|24小时|7天|30天)?$"
 _RANGE_PARAM_MAP: dict[str, str] = {
     "6h": "6h",
     "24h": "24h",
@@ -23,7 +22,7 @@ _RANGE_PARAM_MAP: dict[str, str] = {
 }
 
 
-@sv_activity.on_regex(_ACTIVITY_PATTERN, block=True)
+@sv_activity.on_regex(r"^活跃图(?P<range>6h|24h|7d|30d|6小时|24小时|7天|30天)?$", block=True)
 async def calabiyau_activity_trend(bot: Bot, ev: Event) -> None:
     raw_range = ev.regex_dict["range"] if "range" in ev.regex_dict else None
     range_key = _RANGE_PARAM_MAP[raw_range] if raw_range in _RANGE_PARAM_MAP else "24h"
@@ -40,7 +39,7 @@ async def calabiyau_activity_trend(bot: Bot, ev: Event) -> None:
     await bot.send(image)
 
 
-@sv_activity.on_fullmatch("世界聊天", block=True)
+@sv_activity.on_fullmatch(("世界聊天", "世界频道"), block=True)
 async def calabiyau_world_chat(bot: Bot, ev: Event) -> None:
     try:
         image = await build_world_chat_card()

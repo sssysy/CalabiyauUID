@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
-from .render import CARD_WIDTH, CardTemplateContext, render_card
-from ...api.dakanu import DakanuClan, DakanuClanMember
+from ..render import CARD_WIDTH, CardTemplateContext, render_card
+from ....api.dakanu import DakanuClan, DakanuClanMember
 
 
 @dataclass(frozen=True)

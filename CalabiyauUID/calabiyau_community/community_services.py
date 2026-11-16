@@ -25,8 +25,8 @@ from ..utils.helper.assets import (
     local_avatar_image,
     local_chat_emote_image,
 )
-from ..utils.render.html.activity_card import render_activity_card
-from ..utils.render.html.world_chat_card import (
+from ..utils.render.html.renderer.activity_card import render_activity_card
+from ..utils.render.html.renderer.world_chat_card import (
     DEFAULT_WORLD_CHAT_LIMIT,
     WorldChatAssets,
     collect_chat_asset_ids,

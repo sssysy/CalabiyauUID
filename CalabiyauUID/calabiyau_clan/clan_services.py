@@ -18,7 +18,7 @@ from ..utils.helper.assets import image_data_uri, local_avatar_image
 from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import is_numeric_uid
-from ..utils.render.html.clan_card import render_clan_card
+from ..utils.render.html.renderer.clan_card import render_clan_card
 
 _DOWNLOAD_CONCURRENCY = 8
 

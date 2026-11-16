@@ -13,7 +13,7 @@ from ..utils.api.dakanu import (
     fetch_replay_download_ticket,
 )
 from ..utils.downloader import download_replay, find_cached_replay
-from ..utils.helper.config import use_file_uri_for_replay
+from ..calabiyau_config.calabiyau_config import CalabiyauConfig
 
 _room_locks: dict[str, asyncio.Lock] = {}
 
@@ -63,7 +63,7 @@ async def ensure_replay_file(room_id: str) -> Path:
 
 async def build_replay_file_message(replay_path: Path) -> Message:
     """按配置构造 file:// 直指或 base64 文件消息段。"""
-    if use_file_uri_for_replay():
+    if CalabiyauConfig.get_config("ReplayUseFileURI").data:
         file_uri = replay_path.resolve().as_uri()
         return Message(type="file", data=f"{replay_path.name}|{file_uri}")
     return await to_thread(MessageSegment.file)(replay_path, replay_path.name)
