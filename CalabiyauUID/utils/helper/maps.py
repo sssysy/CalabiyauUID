@@ -222,10 +222,7 @@ def _normalize_role_token(text: str) -> str:
 
 
 def _expand_pinyin(syllables: list[list[str]], *, limit: int = 64) -> tuple[str, ...]:
-    unique_slots = [
-        list(dict.fromkeys(item.casefold() for item in slot if item))
-        for slot in syllables
-    ]
+    unique_slots = [list(dict.fromkeys(item.casefold() for item in slot if item)) for slot in syllables]
     if not unique_slots or any(not slot for slot in unique_slots):
         return ()
     combos = ("".join(parts) for parts in itertools.product(*unique_slots))
@@ -235,15 +232,9 @@ def _expand_pinyin(syllables: list[list[str]], *, limit: int = 64) -> tuple[str,
 @lru_cache(maxsize=512)
 def _extract_pinyin_variants(normalized: str) -> _PinyinVariants:
     default_full = "".join(lazy_pinyin(normalized)).casefold()
-    default_initials = "".join(
-        lazy_pinyin(normalized, style=Style.FIRST_LETTER)
-    ).casefold()
-    heteronym_full = _expand_pinyin(
-        pinyin(normalized, style=Style.NORMAL, heteronym=True)
-    )
-    heteronym_initials = _expand_pinyin(
-        pinyin(normalized, style=Style.FIRST_LETTER, heteronym=True)
-    )
+    default_initials = "".join(lazy_pinyin(normalized, style=Style.FIRST_LETTER)).casefold()
+    heteronym_full = _expand_pinyin(pinyin(normalized, style=Style.NORMAL, heteronym=True))
+    heteronym_initials = _expand_pinyin(pinyin(normalized, style=Style.FIRST_LETTER, heteronym=True))
     return _PinyinVariants(
         default_full=default_full,
         default_initials=default_initials,

@@ -69,9 +69,7 @@ def parse_smw_beijing_time(item: object) -> datetime | None:
         if isinstance(raw_ts, str):
             stripped = raw_ts.strip()
             if stripped.lstrip("-").isdigit():
-                return datetime.fromtimestamp(int(stripped), timezone.utc).replace(
-                    tzinfo=_BEIJING_TZ
-                )
+                return datetime.fromtimestamp(int(stripped), timezone.utc).replace(tzinfo=_BEIJING_TZ)
     if "raw" in item and isinstance(item["raw"], str):
         parts = item["raw"].split("/")
         if len(parts) >= 7 and all(part.isdigit() for part in parts[1:7]):
@@ -136,11 +134,7 @@ def parse_ask_activities(payload: object) -> list[WikiRawActivity]:
 
         image_name = _first_nonempty_str(printouts, "活动图片") or ""
         summary = _first_nonempty_str(printouts, "活动简介") or ""
-        page_url = (
-            entry["fullurl"].strip()
-            if "fullurl" in entry and isinstance(entry["fullurl"], str)
-            else ""
-        )
+        page_url = entry["fullurl"].strip() if "fullurl" in entry and isinstance(entry["fullurl"], str) else ""
         items.append(
             WikiRawActivity(
                 title=title,
@@ -237,17 +231,11 @@ async def fetch_ongoing_activities(now: datetime | None = None) -> list[WikiActi
             },
         )
         raw_items = parse_ask_activities(ask_payload)
-        ongoing_raw = [
-            item
-            for item in raw_items
-            if item.start_at <= current <= item.end_at
-        ]
+        ongoing_raw = [item for item in raw_items if item.start_at <= current <= item.end_at]
         if not ongoing_raw:
             return []
 
-        unique_images = list(
-            dict.fromkeys(item.image_name for item in ongoing_raw if item.image_name)
-        )
+        unique_images = list(dict.fromkeys(item.image_name for item in ongoing_raw if item.image_name))
         image_urls: dict[str, str] = {}
         for offset in range(0, len(unique_images), _IMAGEINFO_BATCH_SIZE):
             batch = unique_images[offset : offset + _IMAGEINFO_BATCH_SIZE]

@@ -162,6 +162,24 @@
                 "need_admin": false
             },
             {
+                "name": "订阅活动结束提醒",
+                "desc": "开启活动结束前 24 小时提醒",
+                "eg": "订阅活动结束提醒",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "取消订阅活动结束提醒",
+                "desc": "取消活动结束前 24 小时提醒",
+                "eg": "取消订阅活动结束提醒",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "活跃图",
                 "desc": "查看玩家活跃趋势卡片，支持 6h/24h/7d/30d",
                 "eg": "活跃图",

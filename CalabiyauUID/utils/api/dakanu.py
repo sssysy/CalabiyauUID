@@ -1593,13 +1593,7 @@ def _parse_chat_message(raw: object) -> DakanuChatMessage | None:
     nick = _opt_str(raw, "nick")
     message = _opt_str(raw, "message")
     sent_at = _opt_int(raw, "sent_at")
-    if (
-        channel is None
-        or player_id is None
-        or nick is None
-        or message is None
-        or sent_at is None
-    ):
+    if channel is None or player_id is None or nick is None or message is None or sent_at is None:
         return None
     return {
         "channel": channel,

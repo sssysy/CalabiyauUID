@@ -161,9 +161,7 @@ def build_activity_context(activity: DakanuGameActivity) -> ActivityTemplateCont
         tick_indices = list(range(count))
     else:
         tick_count = 24
-        tick_indices = sorted(
-            {round(i * (count - 1) / max(1, tick_count - 1)) for i in range(tick_count)}
-        )
+        tick_indices = sorted({round(i * (count - 1) / max(1, tick_count - 1)) for i in range(tick_count)})
     x_fmt = "%H:%M" if range_val == "6h" else "%m-%d %H:%M" if range_val == "24h" else "%m-%d"
     x_ticks: list[XTickItem] = []
     for ci in tick_indices:
@@ -182,16 +180,10 @@ def build_activity_context(activity: DakanuGameActivity) -> ActivityTemplateCont
         )
 
     line_points = " ".join(f"{x:.1f},{y:.1f}" for _, _, x, y in coords)
-    area_points = (
-        f"{coords[0][2]:.1f},{_AXIS_Y:.1f} "
-        + line_points
-        + f" {coords[-1][2]:.1f},{_AXIS_Y:.1f}"
-    )
+    area_points = f"{coords[0][2]:.1f},{_AXIS_Y:.1f} " + line_points + f" {coords[-1][2]:.1f},{_AXIS_Y:.1f}"
 
     dots: tuple[ChartDotItem, ...] = (
-        tuple(ChartDotItem(cx=f"{x:.1f}", cy=f"{y:.1f}") for _, _, x, y in coords)
-        if count <= 32
-        else ()
+        tuple(ChartDotItem(cx=f"{x:.1f}", cy=f"{y:.1f}") for _, _, x, y in coords) if count <= 32 else ()
     )
 
     max_at, max_val, max_x, max_y = max(coords, key=lambda item: item[1])

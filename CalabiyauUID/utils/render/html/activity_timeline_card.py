@@ -126,10 +126,7 @@ def build_activity_timeline_context(
         bars.append(
             TimelineBarItem(
                 title=item.title,
-                date_text=(
-                    f"{item.start_at.month}.{item.start_at.day}"
-                    f"~{item.end_at.month}.{item.end_at.day}"
-                ),
+                date_text=(f"{item.start_at.month}.{item.start_at.day}~{item.end_at.month}.{item.end_at.day}"),
                 rem_text=_format_remaining(remaining, is_narrow=is_narrow),
                 image_uri=uri,
                 left_pct=f"{left_val:.3f}",

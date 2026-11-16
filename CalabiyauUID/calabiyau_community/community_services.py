@@ -91,10 +91,7 @@ async def _load_role_images(
 ) -> dict[int, str]:
     ordered = sorted(role_ids)
     uris = await asyncio.gather(
-        *(
-            _resolve_image_uri(role_image_url(role_id), local_role_image(role_id), semaphore)
-            for role_id in ordered
-        )
+        *(_resolve_image_uri(role_image_url(role_id), local_role_image(role_id), semaphore) for role_id in ordered)
     )
     return {role_id: uri for role_id, uri in zip(ordered, uris, strict=True)}
 
@@ -137,11 +134,7 @@ async def build_activity_card(
     """拉取玩家活跃趋势并渲染卡片，带 60 秒内存缓存。"""
     async with _activity_cache_lock:
         now = time.monotonic()
-        if (
-            use_cache
-            and range_key in _activity_cached_cards
-            and now < _activity_cached_cards[range_key].expires_at
-        ):
+        if use_cache and range_key in _activity_cached_cards and now < _activity_cached_cards[range_key].expires_at:
             return _activity_cached_cards[range_key].image
 
         activity = await fetch_game_activity(range_key)
@@ -161,11 +154,7 @@ async def build_world_chat_card(
     """拉取世界频道聚合动态并渲染卡片，带 60 秒内存缓存。"""
     async with _chat_cache_lock:
         now = time.monotonic()
-        if (
-            use_cache
-            and limit in _chat_cached_cards
-            and now < _chat_cached_cards[limit].expires_at
-        ):
+        if use_cache and limit in _chat_cached_cards and now < _chat_cached_cards[limit].expires_at:
             return _chat_cached_cards[limit].image
 
         aggregate = await fetch_chat_aggregate(limit_per_channel=30)

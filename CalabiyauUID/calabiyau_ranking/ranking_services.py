@@ -73,7 +73,10 @@ async def _load_avatar_images(avatar_ids: set[int], semaphore: asyncio.Semaphore
 async def load_ranking_role_images(role_ids: set[int], semaphore: asyncio.Semaphore) -> dict[int, str]:
     ordered = sorted(role_ids)
     uris = await asyncio.gather(
-        *(resolve_ranking_image_uri(role_image_url(role_id), local_role_image(role_id), semaphore) for role_id in ordered)
+        *(
+            resolve_ranking_image_uri(role_image_url(role_id), local_role_image(role_id), semaphore)
+            for role_id in ordered
+        )
     )
     return {role_id: uri for role_id, uri in zip(ordered, uris, strict=True)}
 

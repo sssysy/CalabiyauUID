@@ -17,6 +17,7 @@ from ..utils.api.biligame_wiki import (
     beijing_now,
     fetch_ongoing_activities,
 )
+from ..utils.helper.activity_remind import sync_reminders_from_activities
 from ..utils.render.html.activity_timeline_card import render_activity_timeline_card
 
 _CACHE_TTL_SECONDS = 300.0
@@ -62,12 +63,7 @@ async def _load_activity_images(
         if item.image_name and item.image_url and item.image_name not in url_by_name:
             url_by_name[item.image_name] = item.image_url
     ordered_names = list(url_by_name.keys())
-    uris = await asyncio.gather(
-        *(
-            _resolve_image_uri(url_by_name[name], None, semaphore)
-            for name in ordered_names
-        )
-    )
+    uris = await asyncio.gather(*(_resolve_image_uri(url_by_name[name], None, semaphore) for name in ordered_names))
     return {name: uri for name, uri in zip(ordered_names, uris, strict=True)}
 
 
@@ -76,15 +72,12 @@ async def build_event_timeline_card(*, use_cache: bool = True) -> bytes:
     global _timeline_cached_card
     async with _timeline_cache_lock:
         mono_now = time.monotonic()
-        if (
-            use_cache
-            and _timeline_cached_card is not None
-            and mono_now < _timeline_cached_card.expires_at
-        ):
+        if use_cache and _timeline_cached_card is not None and mono_now < _timeline_cached_card.expires_at:
             return _timeline_cached_card.image
 
         now = beijing_now()
         activities = await fetch_ongoing_activities(now)
+        await sync_reminders_from_activities(activities, now, allow_catchup_send=False)
         semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
         banner_path = local_banner_bg_image()
         banner_bg_uri, image_uris = await asyncio.gather(

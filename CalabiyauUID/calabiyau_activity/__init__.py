@@ -10,6 +10,7 @@ from ..utils.api.biligame_wiki import WikiError
 
 sv_activity = SV("卡拉彼丘活动")
 
+
 @sv_activity.on_fullmatch("活动", block=True)
 async def calabiyau_event_timeline(bot: Bot, ev: Event) -> None:
     try:

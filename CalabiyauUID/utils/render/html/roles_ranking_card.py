@@ -131,8 +131,7 @@ def _build_roles_ranking_context(
         raise ValueError(f"不支持的排序字段：{sort_by}")
     sorted_entries = _sort_entries(board["entries"], sort_by)
     rows = tuple(
-        _build_row_item(idx, entry, role_names, role_images)
-        for idx, entry in enumerate(sorted_entries, start=1)
+        _build_row_item(idx, entry, role_names, role_images) for idx, entry in enumerate(sorted_entries, start=1)
     )
     title = "超弦体胜率排行" if sort_by == "winRate" else "超弦体登场率排行"
     scope_label = "仅排位" if board["rankedOnly"] else "全部模式"

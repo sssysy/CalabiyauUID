@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
 from .render import CardTemplateContext, render_card, render_template
-from ...api.dakanu import DakanuChatAggregate, DakanuChatMessage
+from ...api.dakanu import DakanuChatMessage, DakanuChatAggregate
 from .summary_card import tier_display
 
 DEFAULT_WORLD_CHAT_LIMIT = 25
@@ -15,9 +15,7 @@ _EMOTE_RE = re.compile(
     r'\[style=(?:"Image"|\'Image\')\s+id=(?:"#?(\d+)"|\'#?(\d+)\')\]',
     re.IGNORECASE,
 )
-_KV_RE = re.compile(
-    r"(?:^|,)([A-Za-z][A-Za-z0-9_]*)=([\s\S]*?)(?=,[A-Za-z][A-Za-z0-9_]*=|$)"
-)
+_KV_RE = re.compile(r"(?:^|,)([A-Za-z][A-Za-z0-9_]*)=([\s\S]*?)(?=,[A-Za-z][A-Za-z0-9_]*=|$)")
 _MEMBER_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 
 
@@ -299,11 +297,7 @@ def _build_team_card(kv: Mapping[str, str]) -> TeamCardInfo:
 
 
 def _build_clan_card(kv: Mapping[str, str]) -> ClanCardInfo:
-    clan_name = (
-        _clean_val(_kv_value(kv, "clanName"))
-        or _clean_val(_kv_value(kv, "ClanName"))
-        or "未命名战队"
-    )
+    clan_name = _clean_val(_kv_value(kv, "clanName")) or _clean_val(_kv_value(kv, "ClanName")) or "未命名战队"
     clan_id = _clean_val(_kv_value(kv, "clanId")) or _clean_val(_kv_value(kv, "ClanId")) or ""
     return ClanCardInfo(clan_name=clan_name, clan_id=clan_id)
 
@@ -324,11 +318,7 @@ def build_world_chat_context(
         player_id = msg["player_id"]
         nickname = msg["nick"] or player_id or "未知玩家"
         icon_id = msg["icon"]
-        avatar_uri = (
-            assets.avatar_images[icon_id]
-            if icon_id is not None and icon_id in assets.avatar_images
-            else ""
-        )
+        avatar_uri = assets.avatar_images[icon_id] if icon_id is not None and icon_id in assets.avatar_images else ""
         initial = nickname[:1].upper() if nickname else "?"
         sent_time = datetime.fromtimestamp(msg["sent_at"]).strftime("%H:%M")
 
