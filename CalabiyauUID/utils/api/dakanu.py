@@ -2,7 +2,7 @@
 
 import time
 import asyncio
-from typing import TypedDict
+from typing import TypedDict, NotRequired
 
 import httpx
 
@@ -12,6 +12,22 @@ from gsuid_core.logger import logger
 BASE_URL = "https://www.dakanu.com"
 _REFRESH_POLL_INTERVAL = 2.0
 _REFRESH_TIMEOUT = 300.0
+
+
+class DakanuMedal(TypedDict, total=False):
+    id: int
+    axis: list[int] | None
+    zoomScale: float | None
+    rotateScale: float | None
+    levelFlip: bool
+    level: int | None
+
+
+class DakanuPlayerTag(TypedDict, total=False):
+    id: str
+    label: str
+    tone: str
+    description: str
 
 
 class DakanuPlayer(TypedDict):
@@ -26,6 +42,8 @@ class DakanuPlayer(TypedDict):
     borderId: int
     privacyStatus: str
     accountVerified: bool
+    medals: NotRequired[list[DakanuMedal | int]]
+    tags: NotRequired[list[DakanuPlayerTag]]
 
 
 class DakanuPlayerSuggestion(TypedDict):
@@ -41,9 +59,17 @@ class DakanuPlayerSuggestion(TypedDict):
 
 class DakanuPresence(TypedDict):
     state: str
-    onlineStatus: str | None
+    onlineStatus: int | str | None
     lastOnlineAt: int | None
     lastActiveAt: int | None
+    statusText: NotRequired[str | None]
+    regionLabel: NotRequired[str | None]
+    leisureScore: NotRequired[int | None]
+    leisureSegment: NotRequired[int | None]
+    stars: NotRequired[int | None]
+    winGames: NotRequired[int | None]
+    mvpCount: NotRequired[int | None]
+    totalGames: NotRequired[int | None]
 
 
 class DakanuRank(TypedDict):
@@ -89,13 +115,18 @@ class DakanuMode(TypedDict):
     wins: int
     winRate: float
     kd: float
+    kills: NotRequired[int | None]
+    assists: NotRequired[int | None]
+    deaths: NotRequired[int | None]
+    damage: NotRequired[int | None]
+    kda: NotRequired[float | None]
     avgDamage: float
     roundAveDamage: float
     avgKill: float
-    avgAssist: float
-    avgDeath: float
+    avgAssist: float | None
+    avgDeath: NotRequired[float]
     headshotRate: float
-    mvpCount: int
+    mvpCount: int | None
     mvpRate: float
 
 
@@ -423,6 +454,11 @@ def chat_emote_image_url(emote_id: str) -> str:
     """按聊天表情 ID 返回站点表情地址。"""
     cleaned = emote_id.strip().lstrip("#")
     return f"{BASE_URL}/chat-emotes/{cleaned}.webp" if cleaned.isascii() and cleaned.isdigit() else ""
+
+
+def medal_image_url(medal_id: int) -> str:
+    """按勋章 ID 返回站点勋章地址；非法 ID 返回空串。"""
+    return f"{BASE_URL}/medals/{medal_id}.webp" if medal_id > 0 else ""
 
 
 class DakanuError(Exception):

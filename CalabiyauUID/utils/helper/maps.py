@@ -122,6 +122,81 @@ def resolve_role_name(role_id: int) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class RoleMeta:
+    role_id: int
+    faction_code: int
+    faction_name: str
+    faction_dot_color: str
+    faction_text_color: str
+    position_code: int
+    position_name: str
+
+
+ROLE_FACTIONS: dict[int, tuple[str, str, str]] = {
+    1: ("欧泊", "#386CF4", "#2558D9"),
+    2: ("剪刀手", "#FD383F", "#CF2E35"),
+    4: ("乌尔比诺", "#FFB526", "#B87300"),
+}
+
+ROLE_POSITIONS: dict[int, str] = {
+    1: "守护",
+    2: "决斗",
+    3: "控场",
+    4: "支援",
+    6: "先锋",
+}
+
+_ROLE_META_CODES: dict[int, tuple[int, int]] = {
+    101: (1, 1),
+    105: (4, 1),
+    107: (4, 3),
+    108: (1, 1),
+    109: (2, 3),
+    110: (4, 2),
+    112: (4, 2),
+    115: (1, 2),
+    119: (2, 2),
+    120: (2, 4),
+    121: (1, 3),
+    122: (2, 2),
+    123: (1, 1),
+    124: (1, 4),
+    125: (1, 2),
+    126: (2, 6),
+    128: (2, 6),
+    130: (4, 2),
+    131: (1, 3),
+    132: (2, 2),
+    133: (2, 3),
+    137: (2, 6),
+    146: (4, 4),
+    205: (4, 6),
+}
+
+
+def resolve_role_meta(role_id: int) -> RoleMeta | None:
+    """按角色 ID 解析阵营与定位展示信息。"""
+    if role_id not in _ROLE_META_CODES:
+        return None
+    faction_code, position_code = _ROLE_META_CODES[role_id]
+    faction_name = ""
+    faction_dot_color = ""
+    faction_text_color = ""
+    if faction_code in ROLE_FACTIONS:
+        faction_name, faction_dot_color, faction_text_color = ROLE_FACTIONS[faction_code]
+    position_name = ROLE_POSITIONS[position_code] if position_code in ROLE_POSITIONS else ""
+    return RoleMeta(
+        role_id=role_id,
+        faction_code=faction_code,
+        faction_name=faction_name,
+        faction_dot_color=faction_dot_color,
+        faction_text_color=faction_text_color,
+        position_code=position_code,
+        position_name=position_name,
+    )
+
+
 def get_role_display_names() -> dict[int, str]:
     """提取基础角色 ID 到正式展示名的映射。"""
     display_names: dict[int, str] = {}
