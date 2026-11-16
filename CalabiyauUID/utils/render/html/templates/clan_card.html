@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>战队信息 · {{ data.clan_name }}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #eceff4;
+  color: #172033;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background: #eceff4;
+}
+.card {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(22, 26, 33, .09);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
+}
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 18px;
+  background: linear-gradient(135deg, #f8fafd 0%, #eef3fa 100%);
+  border-bottom: 1px solid rgba(22, 26, 33, .08);
+}
+.hero-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.clan-name {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.clan-level {
+  font-size: 16px;
+  font-weight: 700;
+  color: #64748b;
+  font-family: "Mono", Consolas, monospace;
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.clan-id {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  font-family: "Mono", Consolas, monospace;
+}
+.meta-sep {
+  flex: none;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.clan-intro {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hero-right {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.level-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.metric-label {
+  font-size: 12px;
+  color: #64748b;
+}
+.metric-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: "Mono", Consolas, monospace;
+}
+.metric-divider {
+  width: 1px;
+  height: 30px;
+  background: rgba(22, 26, 33, .10);
+}
+.roster-section {
+  padding: 18px 24px 22px;
+}
+.member-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.member-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.member-item {
+  flex: 0 0 449px;
+  width: 449px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid rgba(22, 26, 33, .08);
+}
+.member-rank {
+  width: 24px;
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  font-family: "Mono", Consolas, monospace;
+  text-align: center;
+}
+.member-avatar {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e2e8f0;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(22, 26, 33, .10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.member-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-fallback {
+  font-size: 17px;
+  font-weight: 700;
+  color: #475569;
+}
+.member-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.member-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.member-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.role-leader {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #fff7ed;
+  border: 1px solid rgba(234, 88, 12, .35);
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 700;
+}
+.role-pos {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0369a1;
+}
+.member-sub {
+  font-size: 12.5px;
+  color: #64748b;
+  font-family: "Mono", Consolas, monospace;
+}
+.empty-roster {
+  padding: 36px 20px;
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+}
+.footer {
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+  padding: 14px 10px 0;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="hero">
+      <div class="hero-left">
+        <div class="title-row">
+          <span class="clan-name">{{ data.clan_name }}</span>
+          {% if data.clan_level_text %}
+          <span class="clan-level">{{ data.clan_level_text }}</span>
+          {% endif %}
+        </div>
+        <div class="meta-row">
+          <span class="clan-id">{{ data.clan_id }}</span>
+          {% if data.intro %}
+          <span class="meta-sep">·</span>
+          <span class="clan-intro">{{ data.intro }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="hero-right">
+        <div class="level-metric">
+          <span class="metric-label">平均等级</span>
+          <span class="metric-val">{{ data.avg_level_text }}</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="level-metric">
+          <span class="metric-label">最高等级</span>
+          <span class="metric-val">{{ data.max_level_text }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="roster-section">
+      {% if data.rows %}
+      <div class="member-grid">
+        {% for row in data.rows %}
+        <div class="member-row">
+          <div class="member-item">
+            <div class="member-rank">{{ row.left.rank_text }}</div>
+            <div class="member-avatar">
+              {% if row.left.avatar %}
+              <img src="{{ row.left.avatar }}" alt="">
+              {% else %}
+              <span class="avatar-fallback">{{ row.left.initial }}</span>
+              {% endif %}
+            </div>
+            <div class="member-main">
+              <div class="member-top">
+                <span class="member-name">{{ row.left.nickname }}</span>
+                {% if row.left.is_leader %}
+                <span class="role-leader">队长</span>
+                {% elif row.left.position_text %}
+                <span class="role-pos">{{ row.left.position_text }}</span>
+                {% endif %}
+              </div>
+              <div class="member-sub">{{ row.left.sub_text }}</div>
+            </div>
+          </div>
+          {% if row.right %}
+          <div class="member-item">
+            <div class="member-rank">{{ row.right.rank_text }}</div>
+            <div class="member-avatar">
+              {% if row.right.avatar %}
+              <img src="{{ row.right.avatar }}" alt="">
+              {% else %}
+              <span class="avatar-fallback">{{ row.right.initial }}</span>
+              {% endif %}
+            </div>
+            <div class="member-main">
+              <div class="member-top">
+                <span class="member-name">{{ row.right.nickname }}</span>
+                {% if row.right.is_leader %}
+                <span class="role-leader">队长</span>
+                {% elif row.right.position_text %}
+                <span class="role-pos">{{ row.right.position_text }}</span>
+                {% endif %}
+              </div>
+              <div class="member-sub">{{ row.right.sub_text }}</div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-roster">暂无战队成员数据</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

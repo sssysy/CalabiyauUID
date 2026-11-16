@@ -73,7 +73,16 @@
             {
                 "name": "回放下载",
                 "desc": "下载指定对局 ID 的回放文件并发送",
-                "eg": "回放下载123456789012345678",
+                "eg": "回放下载12345678",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "战队查询",
+                "desc": "查看指定战队或当前绑定账号所在战队信息",
+                "eg": "战队jmcomic",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,

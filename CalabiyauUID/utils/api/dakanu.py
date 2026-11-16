@@ -5,7 +5,7 @@ import time
 import asyncio
 from typing import TypedDict, NotRequired
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
@@ -320,6 +320,25 @@ class DakanuClanSearch(TypedDict):
     ok: bool
     count: int
     clans: list[DakanuClan]
+
+
+class DakanuClanMember(TypedDict):
+    playerId: str
+    nickname: str
+    avatarId: int | None
+    level: int | None
+    position: int | None
+    isLeader: bool | None
+
+
+class DakanuClanMembersResponse(TypedDict):
+    ok: bool
+    clanId: str
+    count: int
+    members: list[DakanuClanMember]
+    source: str
+    cached: bool
+    refreshing: bool
 
 
 class DakanuFavoriteMode(TypedDict):
@@ -1444,6 +1463,7 @@ def _request_json_get(
     *,
     log_tag: str,
     label: str,
+    ok_statuses: frozenset[int] = frozenset({200}),
 ) -> object:
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
@@ -1457,7 +1477,7 @@ def _request_json_get(
         raise DakanuError("查询过于频繁，请稍后再试。")
     if response.status_code in {502, 503, 504}:
         raise DakanuError(f"战绩站暂时无法读取{label}，请稍后再试。")
-    if response.status_code != 200:
+    if response.status_code not in ok_statuses:
         logger.warning(f"{log_tag} 读取{label}返回 HTTP {response.status_code}")
         raise DakanuError(f"读取{label}失败，请稍后再试。")
     try:
@@ -1698,3 +1718,164 @@ def _fetch_chat_aggregate_sync(limit_per_channel: int) -> DakanuChatAggregate:
 async def fetch_chat_aggregate(limit_per_channel: int = 30) -> DakanuChatAggregate:
     """读取 Dakanu 世界频道聚合消息。"""
     return await _fetch_chat_aggregate_sync(limit_per_channel)
+
+
+_CLAN_MEMBERS_POLL_INTERVAL = 1.5
+_CLAN_MEMBERS_MAX_POLLS = 8
+
+
+def _parse_clan_icon(raw: object) -> DakanuClanIcon | None:
+    if not isinstance(raw, dict):
+        return None
+    bg_id = _opt_int(raw, "bgId")
+    bg_color = _opt_int(raw, "bgColor")
+    image_id = _opt_int(raw, "imageId")
+    image_color = _opt_int(raw, "imageColor")
+    if bg_id is None or bg_color is None or image_id is None or image_color is None:
+        return None
+    return {
+        "bgId": bg_id,
+        "bgColor": bg_color,
+        "imageId": image_id,
+        "imageColor": image_color,
+    }
+
+
+def _parse_clan_item(raw: object) -> DakanuClan | None:
+    if not isinstance(raw, dict):
+        return None
+    clan_id = _opt_str(raw, "clanId")
+    name = _opt_str(raw, "name")
+    level = _opt_int(raw, "level")
+    member_count = _opt_int(raw, "memberCount")
+    raw_icon = raw["icon"] if "icon" in raw else None
+    icon = _parse_clan_icon(raw_icon)
+    intro = _opt_str(raw, "intro")
+    if clan_id is None or name is None or level is None or member_count is None or icon is None:
+        return None
+    return {
+        "clanId": clan_id,
+        "name": name,
+        "level": level,
+        "memberCount": member_count,
+        "icon": icon,
+        "intro": intro if intro is not None else "",
+    }
+
+
+@to_thread
+def _search_clans_sync(name: str | None, clan_id: str | None, limit: int) -> list[DakanuClan]:
+    params: dict[str, str] = {"limit": str(limit)}
+    if clan_id is not None and clan_id.strip():
+        params["clan_id"] = clan_id.strip()
+    elif name is not None and name.strip():
+        params["name"] = name.strip()
+    else:
+        raise DakanuError("请提供战队名称或战队 ID。")
+    payload = _request_json_get(
+        "/api/clans/search",
+        params,
+        log_tag="[卡拉彼丘·战队查询]",
+        label="战队信息",
+    )
+    if not _is_clan_search(payload) or not isinstance(payload, dict):
+        logger.warning("[卡拉彼丘·战队查询] 战队搜索响应结构异常")
+        raise DakanuError("战队数据格式异常，请稍后再试。")
+    raw_clans = payload["clans"]
+    if not isinstance(raw_clans, list):
+        raise DakanuError("战队数据格式异常，请稍后再试。")
+    clans: list[DakanuClan] = []
+    for item in raw_clans:
+        parsed = _parse_clan_item(item)
+        if parsed is not None:
+            clans.append(parsed)
+    return clans
+
+
+async def search_clans(
+    *,
+    name: str | None = None,
+    clan_id: str | None = None,
+    limit: int = 10,
+) -> list[DakanuClan]:
+    """按战队名称或 ID 搜索 Dakanu 战队。"""
+    return await _search_clans_sync(name, clan_id, limit)
+
+
+def _parse_clan_member(raw: object) -> DakanuClanMember | None:
+    if not isinstance(raw, dict):
+        return None
+    player_id = _opt_str(raw, "playerId")
+    nickname = _opt_str(raw, "nickname")
+    if player_id is None or nickname is None:
+        return None
+    return {
+        "playerId": player_id,
+        "nickname": nickname,
+        "avatarId": _opt_int(raw, "avatarId"),
+        "level": _opt_int(raw, "level"),
+        "position": _opt_int(raw, "position"),
+        "isLeader": _opt_bool(raw, "isLeader"),
+    }
+
+
+def _parse_clan_members_response(payload: object) -> DakanuClanMembersResponse | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    refresh_error = _opt_str(payload, "refreshError")
+    clan_id = _opt_str(payload, "clanId")
+    count = _opt_int(payload, "count")
+    source = _opt_str(payload, "source")
+    cached = _opt_bool(payload, "cached")
+    refreshing = _opt_bool(payload, "refreshing")
+    raw_members = payload["members"] if "members" in payload else None
+    if clan_id is None or count is None or not isinstance(raw_members, list):
+        return None
+    members: list[DakanuClanMember] = []
+    for item in raw_members:
+        parsed = _parse_clan_member(item)
+        if parsed is not None:
+            members.append(parsed)
+    if refresh_error and not members:
+        raise DakanuError("战队成员暂时无法读取，请稍后再试。")
+    return {
+        "ok": True,
+        "clanId": clan_id,
+        "count": count,
+        "members": members,
+        "source": source if source is not None else "",
+        "cached": cached if cached is not None else False,
+        "refreshing": refreshing if refreshing is not None else False,
+    }
+
+
+@to_thread
+def _fetch_clan_members_once_sync(clan_id: str, refresh: bool) -> DakanuClanMembersResponse:
+    params: dict[str, str] = {"refresh": "true"} if refresh else {}
+    payload = _request_json_get(
+        f"/api/clans/{quote(clan_id, safe='')}/members",
+        params,
+        log_tag="[卡拉彼丘·战队查询]",
+        label="战队成员",
+        ok_statuses=frozenset({200, 202}),
+    )
+    parsed = _parse_clan_members_response(payload)
+    if parsed is None:
+        logger.warning(f"[卡拉彼丘·战队查询] 战队 {clan_id} 成员响应结构异常")
+        raise DakanuError("战队成员数据格式异常，请稍后再试。")
+    return parsed
+
+
+async def fetch_clan_members(clan_id: str, *, refresh: bool = False) -> DakanuClanMembersResponse:
+    """读取战队成员名册；若上游正在刷新则短轮询等待结果。"""
+    result = await _fetch_clan_members_once_sync(clan_id, refresh)
+    if not result["refreshing"] or result["members"]:
+        return result
+    for _ in range(_CLAN_MEMBERS_MAX_POLLS):
+        await asyncio.sleep(_CLAN_MEMBERS_POLL_INTERVAL)
+        result = await _fetch_clan_members_once_sync(clan_id, False)
+        if not result["refreshing"] or result["members"]:
+            return result
+    if result["members"]:
+        return result
+    raise DakanuError("正在同步战队成员名册，请稍后重试。")
