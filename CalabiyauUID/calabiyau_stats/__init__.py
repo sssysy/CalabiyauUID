@@ -21,7 +21,9 @@ async def calabiyau_stats_summary(bot: Bot, ev: Event) -> None:
 
     snapshot = await load_player_snapshot(player_id)
     if snapshot is None:
-        await bot.send("本地还没有这个玩家的战绩。\n发送 kq刷新数据 拉取后再查看。")
+        await bot.send(
+            f"本地还没有该玩家的战绩缓存（UID：{player_id}）。\n请先发送 kq刷新数据 {player_id} 拉取后再查看。"
+        )
         return
 
     try:

@@ -18,6 +18,7 @@ from ..utils.helper.assets import (
 from ..utils.helper.refresh import refresh_player_data
 from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
+from ..utils.helper.player_resolve import resolve_player_input
 from ..utils.render.html.summary_card import (
     SummaryAssets,
     tier_index,
@@ -27,12 +28,14 @@ from ..utils.render.html.summary_card import (
 
 
 async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
-    """按 UID、@ 用户、当前账号的顺序解析查询目标。"""
+    """按 UID/昵称、@ 用户、当前账号的顺序解析查询目标。"""
     raw_text = ev.text.strip()
     if raw_text:
-        if not raw_text.isdigit():
-            return "", "请在命令后附带卡拉彼丘 UID。\n例如：kq战绩总览 1234567"
-        return raw_text, None
+        try:
+            player_id = await resolve_player_input(raw_text)
+        except DakanuError as exc:
+            return "", str(exc)
+        return player_id, None
 
     at_target = ev.at.strip() if ev.at is not None else ""
     is_self_at = at_target in {ev.bot_id, ev.real_bot_id, ev.bot_self_id}
@@ -41,7 +44,7 @@ async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
     if player_id is not None:
         return player_id, None
     if target_user == ev.user_id:
-        return "", "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID> 进行绑定。"
+        return "", "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定。"
     return "", "对方尚未绑定卡拉彼丘账号。"
 
 
@@ -93,7 +96,9 @@ async def build_summary_card(player_id: str) -> bytes:
     """只读本地快照渲染；没有快照时提示先刷新。"""
     snapshot = await load_player_snapshot(player_id)
     if snapshot is None:
-        raise DakanuError("本地还没有这个玩家的战绩。\n请先发送 kq刷新数据 拉取。")
+        raise DakanuError(
+            f"本地还没有该玩家的战绩缓存（UID：{player_id}）。\n请先发送 kq刷新数据 {player_id} 拉取后再查看。"
+        )
     return await render_snapshot_card(snapshot)
 
 

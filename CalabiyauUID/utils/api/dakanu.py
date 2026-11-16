@@ -28,6 +28,17 @@ class DakanuPlayer(TypedDict):
     accountVerified: bool
 
 
+class DakanuPlayerSuggestion(TypedDict):
+    playerId: str
+    nickname: str
+    matchedName: str
+    matchedBy: str
+    level: int | None
+    icon: int | None
+    exact: bool
+    indexed: bool
+
+
 class DakanuPresence(TypedDict):
     state: str
     onlineStatus: str | None
@@ -1116,3 +1127,83 @@ async def fetch_meta_roles() -> dict[int, str]:
     roles = await _fetch_meta_roles_sync()
     _meta_roles_cache = (time.monotonic() + _META_CACHE_TTL_SECONDS, roles)
     return dict(roles)
+
+
+def _opt_bool(mapping: dict[object, object], key: str) -> bool | None:
+    if key not in mapping:
+        return None
+    value = mapping[key]
+    return value if isinstance(value, bool) else None
+
+
+def _parse_player_suggestion(raw: object) -> DakanuPlayerSuggestion | None:
+    if not isinstance(raw, dict):
+        return None
+    player_id = _opt_str(raw, "playerId")
+    nickname = _opt_str(raw, "nickname")
+    matched_name = _opt_str(raw, "matchedName")
+    matched_by = _opt_str(raw, "matchedBy")
+    exact = _opt_bool(raw, "exact")
+    indexed = _opt_bool(raw, "indexed")
+    if (
+        player_id is None
+        or not player_id.isascii()
+        or not player_id.isdigit()
+        or nickname is None
+        or matched_name is None
+        or matched_by is None
+        or exact is None
+        or indexed is None
+    ):
+        return None
+    return {
+        "playerId": player_id,
+        "nickname": nickname,
+        "matchedName": matched_name,
+        "matchedBy": matched_by,
+        "level": _opt_int(raw, "level"),
+        "icon": _opt_int(raw, "icon"),
+        "exact": exact,
+        "indexed": indexed,
+    }
+
+
+@to_thread
+def _fetch_search_players_sync(query: str) -> list[DakanuPlayerSuggestion]:
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/search/players", params={"q": query})
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·玩家搜索] 搜索玩家 {query} 失败：{exc}")
+        raise DakanuError("搜索玩家失败，请稍后再试。") from None
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法搜索玩家，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·玩家搜索] 搜索玩家 {query} 返回 HTTP {response.status_code}")
+        raise DakanuError("搜索玩家失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning(f"[卡拉彼丘·玩家搜索] 搜索玩家 {query} 返回非 JSON 响应")
+        raise DakanuError("玩家搜索结果格式异常，请稍后再试。") from None
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        raise DakanuError("玩家搜索结果格式异常，请稍后再试。")
+    raw_suggestions = payload["suggestions"] if "suggestions" in payload else None
+    if not isinstance(raw_suggestions, list):
+        raise DakanuError("玩家搜索结果格式异常，请稍后再试。")
+    suggestions: list[DakanuPlayerSuggestion] = []
+    for item in raw_suggestions:
+        parsed = _parse_player_suggestion(item)
+        if parsed is not None:
+            suggestions.append(parsed)
+    return suggestions
+
+
+async def search_players(query: str) -> list[DakanuPlayerSuggestion]:
+    """按昵称或 UID 搜索 Dakanu 玩家候选。"""
+    cleaned = query.strip()
+    if not cleaned:
+        return []
+    return await _fetch_search_players_sync(cleaned)
