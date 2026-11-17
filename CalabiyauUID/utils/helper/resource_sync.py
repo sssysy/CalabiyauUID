@@ -50,6 +50,12 @@ class MirrorProbe:
     latency_ms: int
 
 
+@dataclass(frozen=True)
+class _SyncOutcome:
+    success: bool
+    changed: bool
+
+
 def _as_str_map(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -172,7 +178,7 @@ async def _probe_mirror(mirror: ResourceMirror) -> MirrorProbe | None:
     return MirrorProbe(mirror=mirror, branch=branch, latency_ms=elapsed_ms)
 
 
-async def _clone_from(probe: MirrorProbe) -> bool:
+async def _clone_from(probe: MirrorProbe) -> _SyncOutcome:
     # 目录已有旧素材但不是 git 仓库时，git clone 会拒绝写入非空目录
     await asyncio.to_thread(_drop_dir, _STAGING_DIR)
     success, message = await git_clone(
@@ -185,12 +191,12 @@ async def _clone_from(probe: MirrorProbe) -> bool:
     if not success:
         logger.warning(f"{_MIRROR_TAG} 从 {probe.mirror['name']} 克隆失败：{message}")
         await asyncio.to_thread(_drop_dir, _STAGING_DIR)
-        return False
+        return _SyncOutcome(success=False, changed=False)
 
     await asyncio.to_thread(_drop_dir, RESOURCE_DIR)
     await asyncio.to_thread(_STAGING_DIR.rename, RESOURCE_DIR)
     logger.success(f"{_RESOURCE_TAG} 首次克隆完成，来源 {probe.mirror['name']}")
-    return True
+    return _SyncOutcome(success=True, changed=True)
 
 
 async def _collect_garbage() -> None:
@@ -199,7 +205,7 @@ async def _collect_garbage() -> None:
         logger.warning(f"{_RESOURCE_TAG} 清理旧对象失败：{stderr}")
 
 
-async def _update_from(probe: MirrorProbe) -> bool:
+async def _update_from(probe: MirrorProbe) -> _SyncOutcome:
     current_remote = await git_get_remote_url(RESOURCE_DIR)
     if current_remote != probe.mirror["url"]:
         success, message = await git_set_remote_url(RESOURCE_DIR, probe.mirror["url"])
@@ -219,32 +225,35 @@ async def _update_from(probe: MirrorProbe) -> bool:
     )
     if retcode != 0:
         logger.warning(f"{_MIRROR_TAG} 从 {probe.mirror['name']} 拉取失败：{stderr or stdout}")
-        return False
+        return _SyncOutcome(success=False, changed=False)
 
     success, message = await git_reset_hard(RESOURCE_DIR, "FETCH_HEAD")
     if not success:
         logger.warning(f"{_RESOURCE_TAG} 更新失败：{message}")
-        return False
+        return _SyncOutcome(success=False, changed=False)
 
     new_head = await git_get_current_commit(RESOURCE_DIR)
     if not new_head:
         logger.warning(f"{_RESOURCE_TAG} 无法读取资源仓库版本")
-        return False
-    if old_head == new_head:
+        return _SyncOutcome(success=False, changed=False)
+    changed = old_head != new_head
+    if not changed:
         logger.info(f"{_RESOURCE_TAG} 资源已是最新")
     else:
         logger.success(f"{_RESOURCE_TAG} 资源更新完成，来源 {probe.mirror['name']}")
     await _collect_garbage()
-    return True
+    return _SyncOutcome(success=True, changed=changed)
 
 
-async def _sync_with(probe: MirrorProbe) -> bool:
+async def _sync_with(probe: MirrorProbe) -> _SyncOutcome:
     if not _is_git_repo() or await asyncio.to_thread(_STAGING_DIR.exists):
         return await _clone_from(probe)
     return await _update_from(probe)
 
 
 async def update_resources() -> bool:
+    synced = False
+    synced_changed = False
     async with _update_lock:
         await asyncio.to_thread(RESOURCE_DIR.mkdir, parents=True, exist_ok=True)
         mirrors = await _load_mirrors()
@@ -261,10 +270,21 @@ async def update_resources() -> bool:
             return False
 
         for probe in available:
-            if await _sync_with(probe):
-                return True
-        logger.warning(f"{_RESOURCE_TAG} 所有镜像同步失败")
-        return False
+            outcome = await _sync_with(probe)
+            if outcome.success:
+                synced = True
+                synced_changed = outcome.changed
+                break
+        if not synced:
+            logger.warning(f"{_RESOURCE_TAG} 所有镜像同步失败")
+            return False
+
+    if synced_changed:
+        # 延迟导入以避免插件顶层初始化阶段抢跑加载 calabiyau_ai
+        from ...calabiyau_ai.knowledge.entities import sync_calabiyau_knowledge
+
+        await sync_calabiyau_knowledge()
+    return True
 
 
 @on_core_start(priority=100)

@@ -9,6 +9,7 @@ from gsuid_core.logger import logger
 
 _WIKI_API_URL = "https://wiki.biligame.com/klbq/api.php"
 _WIKI_REFERER = "https://wiki.biligame.com/klbq/%E6%B4%BB%E5%8A%A8"
+_WIKI_CDKEY_REFERER = "https://wiki.biligame.com/klbq/%E5%85%91%E6%8D%A2%E7%A0%81"
 _WIKI_HEADERS: dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -21,6 +22,7 @@ _WIKI_HEADERS: dict[str, str] = {
 _BEIJING_TZ = timezone(timedelta(hours=8))
 _IMAGEINFO_BATCH_SIZE = 50
 _LOG_TAG = "[卡拉彼丘·活动查询]"
+_CDKEY_LOG_TAG = "[卡拉彼丘·兑换码]"
 
 
 class WikiError(RuntimeError):
@@ -50,6 +52,16 @@ class WikiActivityItem:
     end_at: datetime
     summary: str
     page_url: str
+    is_permanent: bool
+
+
+@dataclass(frozen=True)
+class WikiRedeemCodeItem:
+    """从 SMW ask 接口解析出的兑换码条目。"""
+
+    code: str
+    rewards: str
+    expires_at: datetime
     is_permanent: bool
 
 
@@ -100,15 +112,20 @@ def _first_time(printouts: dict[object, object], key: str) -> datetime | None:
     return parse_smw_beijing_time(values[0])
 
 
-def parse_ask_activities(payload: object) -> list[WikiRawActivity]:
-    """解析 SMW action=ask 返回的活动列表。"""
+def _extract_ask_results(payload: object) -> dict[object, object]:
     if not isinstance(payload, dict) or "query" not in payload:
-        return []
+        return {}
     query_obj = payload["query"]
     if not isinstance(query_obj, dict) or "results" not in query_obj:
-        return []
+        return {}
     results = query_obj["results"]
-    if not isinstance(results, dict):
+    return results if isinstance(results, dict) else {}
+
+
+def parse_ask_activities(payload: object) -> list[WikiRawActivity]:
+    """解析 SMW action=ask 返回的活动列表。"""
+    results = _extract_ask_results(payload)
+    if not results:
         return []
 
     items: list[WikiRawActivity] = []
@@ -148,6 +165,35 @@ def parse_ask_activities(payload: object) -> list[WikiRawActivity]:
     return items
 
 
+def parse_ask_redeem_codes(payload: object) -> list[WikiRedeemCodeItem]:
+    """解析 SMW action=ask 返回的兑换码列表。"""
+    results = _extract_ask_results(payload)
+    if not results:
+        return []
+
+    items: list[WikiRedeemCodeItem] = []
+    for entry in results.values():
+        if not isinstance(entry, dict) or "printouts" not in entry:
+            continue
+        printouts = entry["printouts"]
+        if not isinstance(printouts, dict):
+            continue
+        code = _first_nonempty_str(printouts, "兑换码")
+        expires_at = _first_time(printouts, "兑换码失效时间")
+        if code is None or expires_at is None:
+            continue
+        rewards = _first_nonempty_str(printouts, "奖励内容") or ""
+        items.append(
+            WikiRedeemCodeItem(
+                code=code,
+                rewards=rewards,
+                expires_at=expires_at,
+                is_permanent=expires_at.year >= 2099,
+            )
+        )
+    return items
+
+
 def parse_imageinfo_urls(payload: object) -> dict[str, str]:
     """解析 MediaWiki imageinfo 返回的 文件名 -> CDN 直链映射。"""
     if not isinstance(payload, dict) or "query" not in payload:
@@ -182,28 +228,31 @@ def parse_imageinfo_urls(payload: object) -> dict[str, str]:
 async def _request_wiki_json(
     client: httpx.AsyncClient,
     params: dict[str, str],
+    *,
+    log_tag: str = _LOG_TAG,
+    subject: str = "Wiki 活动数据",
 ) -> object:
     try:
         response = await client.get(_WIKI_API_URL, params=params)
     except httpx.HTTPError as exc:
-        logger.warning(f"{_LOG_TAG} 请求 Biligame Wiki 失败：{exc}")
-        raise WikiError("获取 Wiki 活动数据失败，请稍后再试。") from None
+        logger.warning(f"{log_tag} 请求 Biligame Wiki 失败：{exc}")
+        raise WikiError(f"获取 {subject} 失败，请稍后再试。") from None
 
     if response.status_code in {429, 567}:
-        logger.warning(f"{_LOG_TAG} Biligame Wiki 返回限流状态 HTTP {response.status_code}")
+        logger.warning(f"{log_tag} Biligame Wiki 返回限流状态 HTTP {response.status_code}")
         raise WikiError("Wiki 查询过于频繁，请稍后再试。")
     if response.status_code in {502, 503, 504}:
-        logger.warning(f"{_LOG_TAG} Biligame Wiki 上游异常 HTTP {response.status_code}")
+        logger.warning(f"{log_tag} Biligame Wiki 上游异常 HTTP {response.status_code}")
         raise WikiError("Wiki 服务暂时不可用，请稍后再试。")
     if response.status_code != 200:
-        logger.warning(f"{_LOG_TAG} Biligame Wiki 返回异常状态 HTTP {response.status_code}")
-        raise WikiError("获取 Wiki 活动数据失败，请稍后再试。")
+        logger.warning(f"{log_tag} Biligame Wiki 返回异常状态 HTTP {response.status_code}")
+        raise WikiError(f"获取 {subject} 失败，请稍后再试。")
 
     try:
         return response.json()
     except ValueError:
-        logger.warning(f"{_LOG_TAG} Biligame Wiki 返回非 JSON 响应")
-        raise WikiError("Wiki 活动数据格式异常，请稍后再试。") from None
+        logger.warning(f"{log_tag} Biligame Wiki 返回非 JSON 响应")
+        raise WikiError(f"{subject}格式异常，请稍后再试。") from None
 
 
 async def fetch_ongoing_activities(now: datetime | None = None) -> list[WikiActivityItem]:
@@ -265,3 +314,33 @@ async def fetch_ongoing_activities(now: datetime | None = None) -> list[WikiActi
         )
         for item in ongoing_raw
     ]
+
+
+async def fetch_active_redeem_codes(now: datetime | None = None) -> list[WikiRedeemCodeItem]:
+    """获取当前未失效的兑换码列表（2099 年占位时间视为常驻）。"""
+    current = now.astimezone(_BEIJING_TZ) if now is not None else beijing_now()
+    # 按前一天起算做服务端粗筛，避免凌晨边界被 SMW 日期截断
+    cutoff_date = (current - timedelta(days=1)).strftime("%Y-%m-%d")
+    ask_query = (
+        f"[[兑换码::+]][[兑换码失效时间::≥{cutoff_date}]]"
+        "|?兑换码|?奖励内容|?兑换码失效时间"
+        "|sort=兑换码失效时间|order=asc|limit=100"
+    )
+
+    async with httpx.AsyncClient(
+        headers={**_WIKI_HEADERS, "Referer": _WIKI_CDKEY_REFERER},
+        timeout=20.0,
+        follow_redirects=True,
+    ) as client:
+        ask_payload = await _request_wiki_json(
+            client,
+            {
+                "action": "ask",
+                "query": ask_query,
+                "format": "json",
+            },
+            log_tag=_CDKEY_LOG_TAG,
+            subject="Wiki 兑换码数据",
+        )
+    raw_items = parse_ask_redeem_codes(ask_payload)
+    return [item for item in raw_items if item.is_permanent or current <= item.expires_at]
