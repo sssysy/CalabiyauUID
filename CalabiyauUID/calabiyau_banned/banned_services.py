@@ -16,6 +16,7 @@ from ..utils.api.dakanu import (
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import image_data_uri, local_tier_image, local_avatar_image
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.helper.player_resolve import is_numeric_uid
 from ..utils.render.html.renderer.banned_card import BannedSearchMode, render_banned_card
 from ..utils.render.html.renderer.summary_card import tier_display
@@ -29,6 +30,7 @@ _DOWNLOAD_CONCURRENCY = 8
 class _BannedCardCache:
     expires_at: float
     image: bytes
+    summary: str
 
 
 _default_cache_lock = asyncio.Lock()
@@ -99,6 +101,7 @@ async def _render_entries(
     *,
     search_mode: BannedSearchMode,
 ) -> bytes:
+    emit_ai_text(_format_banned_ai_summary(entries, total, search_mode=search_mode))
     semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
     avatar_images, tier_images = await asyncio.gather(
         _load_avatar_images(entries, semaphore),
@@ -115,6 +118,24 @@ async def _render_entries(
     )
 
 
+def _format_banned_ai_summary(
+    entries: list[DakanuBannedEntry],
+    total: int,
+    *,
+    search_mode: BannedSearchMode,
+) -> str:
+    mode_label = {"list": "最新封禁榜", "exact": "UID 精确查询", "fuzzy": "昵称查询"}[search_mode]
+    lines: list[str] = [f"【卡拉彼丘封神榜（{mode_label}，匹配总计 {total} 条，展示 {len(entries)} 条）】"]
+    for idx, entry in enumerate(entries[:10], start=1):
+        uid_text = entry["playerId"] if entry["playerId"] is not None else entry["maskedId"]
+        tier_text = tier_display(entry["segment"])[0] if entry["segment"] is not None else "未知段位"
+        lines.append(
+            f"{idx}. {entry['nickname']}（UID:{uid_text}，{tier_text}，对局数 {entry['matchCount']}）"
+            f"｜公告：{entry['announcementTitle']}"
+        )
+    return "\n".join(lines)
+
+
 async def build_banned_card(*, query: str = "", use_cache: bool = True) -> bytes:
     """拉取封神榜前 21 条或按昵称/UID 查询并渲染封神榜卡片。"""
     global _default_card_cache
@@ -123,12 +144,15 @@ async def build_banned_card(*, query: str = "", use_cache: bool = True) -> bytes
         async with _default_cache_lock:
             now = time.monotonic()
             if use_cache and _default_card_cache is not None and now < _default_card_cache.expires_at:
+                emit_ai_text(_default_card_cache.summary)
                 return _default_card_cache.image
             response = await fetch_banned_players(offset=0, limit=_DEFAULT_LIMIT)
+            summary = _format_banned_ai_summary(response["entries"], response["total"], search_mode="list")
             image = await _render_entries(response["entries"], response["total"], search_mode="list")
             _default_card_cache = _BannedCardCache(
                 expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
                 image=image,
+                summary=summary,
             )
             return image
 

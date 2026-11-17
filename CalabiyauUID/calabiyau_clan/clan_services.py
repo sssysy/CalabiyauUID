@@ -9,12 +9,14 @@ from gsuid_core.models import Event
 from ..utils.api.dakanu import (
     DakanuClan,
     DakanuError,
+    DakanuClanMember,
     search_clans,
     avatar_image_url,
     fetch_clan_members,
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import image_data_uri, local_avatar_image
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import is_numeric_uid
@@ -116,10 +118,29 @@ async def resolve_clan_target(ev: Event) -> tuple[DakanuClan | None, str | None]
     return clan, None
 
 
+def _format_clan_ai_summary(clan: DakanuClan, members: list[DakanuClanMember]) -> str:
+    leaders = [member["nickname"] for member in members if member["isLeader"]]
+    leader_text = "、".join(leaders) if leaders else "未知"
+    intro = clan["intro"].strip() or "暂无简介"
+    member_preview = "、".join(
+        f"{member['nickname']}(Lv.{member['level'] if member['level'] is not None else '?'})"
+        for member in members[:10]
+    )
+    lines: list[str] = [
+        f"【战队信息：{clan['name']}（ID：{clan['clanId']}）】",
+        f"等级：Lv.{clan['level']} | 成员数：{clan['memberCount']}（接口返回 {len(members)} 人） | 队长：{leader_text}",
+        f"简介：{intro}",
+    ]
+    if member_preview:
+        lines.append(f"成员示例（前 {min(10, len(members))} 人）：{member_preview}")
+    return "\n".join(lines)
+
+
 async def build_clan_card(clan: DakanuClan) -> bytes:
     """拉取战队成员与头像素材并渲染战队信息卡片。"""
     members_resp = await fetch_clan_members(clan["clanId"])
     members = members_resp["members"]
+    emit_ai_text(_format_clan_ai_summary(clan, members))
     avatar_ids = {member["avatarId"] for member in members if member["avatarId"] is not None}
     avatar_images = await _load_avatar_images(avatar_ids)
     return await render_clan_card(clan, members, avatar_images)

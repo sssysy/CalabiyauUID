@@ -11,7 +11,19 @@ from ..utils.api.biligame_wiki import WikiError
 sv_activity = SV("卡拉彼丘活动")
 
 
-@sv_activity.on_fullmatch("活动", block=True)
+@sv_activity.on_fullmatch(
+    "活动",
+    block=True,
+    to_ai="""查询卡拉彼丘当前进行中的官方活动时间轴
+
+    当用户询问卡拉彼丘最近有什么活动、活动什么时候结束或当前进行中活动列表时调用。
+
+    Args:
+        text: 无需参数，留空即可
+    """,
+    covers=["卡拉彼丘当前进行中官方活动名称、起止时间与简介"],
+    aliases=["卡拉彼丘·当前活动", "卡拉彼丘·活动时间轴"],
+)
 async def calabiyau_event_timeline(bot: Bot, ev: Event) -> None:
     try:
         image = await build_event_timeline_card()

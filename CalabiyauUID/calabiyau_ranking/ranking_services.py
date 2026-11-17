@@ -13,6 +13,7 @@ from ..utils.api.dakanu import (
     DakanuError,
     DakanuRankingFloor,
     DakanuRankingsBoard,
+    DakanuRolesRankingBoard,
     fetch_rankings,
     role_image_url,
     tier_image_url,
@@ -24,7 +25,7 @@ from ..utils.api.dakanu import (
     challenge_tier_image_url,
 )
 from ..utils.downloader import resolve_image
-from ..utils.helper.maps import resolve_role_alias, get_role_display_names
+from ..utils.helper.maps import resolve_role_name, resolve_role_alias, get_role_display_names
 from ..utils.helper.assets import (
     image_data_uri,
     local_role_image,
@@ -32,8 +33,14 @@ from ..utils.helper.assets import (
     local_avatar_image,
     local_challenge_tier_image,
 )
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.render.html.renderer.ranking_card import RankingCardAssets, render_ranking_card
-from ..utils.render.html.renderer.summary_card import tier_index, challenge_tier_index
+from ..utils.render.html.renderer.summary_card import (
+    tier_index,
+    tier_display,
+    challenge_tier_index,
+    challenge_tier_display,
+)
 from ..utils.render.html.renderer.roles_ranking_card import render_roles_ranking_card
 
 _CACHE_TTL_SECONDS = 30.0
@@ -48,6 +55,7 @@ TierMode = Literal["ranked", "challenge", "none"]
 class _RankingCardCache:
     expires_at: float
     image: bytes
+    summary: str
 
 
 _board_cache_lock = asyncio.Lock()
@@ -221,6 +229,70 @@ async def build_role_board_usage_message() -> str:
     return f"{_ROLE_USAGE_PREFIX}\n可选角色：{available_roles}"
 
 
+def _format_board_ranking_ai_summary(
+    board: DakanuRankingsBoard,
+    floor: DakanuRankingFloor | None,
+    season_label: str,
+    tier_mode: TierMode,
+    title_override: str | None,
+) -> str:
+    title = title_override or board["rankType"]["label"]
+    header = f"【{title}（{season_label or board['day']}，共 {board['total']} 人上榜，{board['metricLabel']}）】"
+    lines: list[str] = [header]
+    if floor is not None:
+        current = floor["current"]
+        lines.append(f"上榜门槛：第 {current['position']} 名 {current['score']} 分（统计日 {current['day']}）")
+    for entry in board["entries"][:10]:
+        tier_text = ""
+        if entry["segment"] is not None:
+            if tier_mode == "ranked":
+                tier_text = f" [{tier_display(entry['segment'])[0]}]"
+            elif tier_mode == "challenge":
+                label = challenge_tier_display(entry["segment"])[0]
+                if label:
+                    tier_text = f" [{label}]"
+        roles_text = "/".join(resolve_role_name(rid) or str(rid) for rid in entry["roles"][:3])
+        role_suffix = f" 常用:{roles_text}" if roles_text else ""
+        lines.append(
+            f"#{entry['position']} {entry['nickname']}（UID:{entry['playerId']}）{tier_text} "
+            f"{entry['score']}分{role_suffix}"
+        )
+    return "\n".join(lines)
+
+
+def _format_roles_ranking_ai_summary(
+    board: DakanuRolesRankingBoard,
+    role_names: dict[int, str],
+    sort_by: RolesSortBy,
+    ranked_only: bool,
+) -> str:
+    scope = "仅排位" if ranked_only else "全模式"
+    metric = "胜率" if sort_by == "winRate" else "出场率"
+    ordered = sorted(
+        board["entries"],
+        key=lambda item: (item["winRate"] if sort_by == "winRate" else item["appearanceRate"], item["games"]),
+        reverse=True,
+    )
+    lines: list[str] = [
+        f"【超弦体{metric}排行（{scope}，统计日 {board['day']}，覆盖 {board['coveredMatches']} 场）】"
+    ]
+    lines.append("Top 5：")
+    for idx, entry in enumerate(ordered[:5], start=1):
+        name = role_names[entry["roleId"]] if entry["roleId"] in role_names else str(entry["roleId"])
+        lines.append(
+            f"{idx}. {name}：胜率 {entry['winRate'] * 100:.1f}% | 出场率 {entry['appearanceRate'] * 100:.1f}% | 场次 {entry['games']}"
+        )
+    if len(ordered) > 5:
+        lines.append("后 5 名：")
+        start_pos = max(6, len(ordered) - 4)
+        for offset, entry in enumerate(ordered[-5:]):
+            name = role_names[entry["roleId"]] if entry["roleId"] in role_names else str(entry["roleId"])
+            lines.append(
+                f"{start_pos + offset}. {name}：胜率 {entry['winRate'] * 100:.1f}% | 出场率 {entry['appearanceRate'] * 100:.1f}% | 场次 {entry['games']}"
+            )
+    return "\n".join(lines)
+
+
 async def build_board_ranking_card(
     rank_type: int,
     *,
@@ -234,7 +306,9 @@ async def build_board_ranking_card(
     async with _board_cache_lock:
         now = time.monotonic()
         if use_cache and cache_key in _cached_board_cards and now < _cached_board_cards[cache_key].expires_at:
-            return _cached_board_cards[cache_key].image
+            cached = _cached_board_cards[cache_key]
+            emit_ai_text(cached.summary)
+            return cached.image
 
         board, floor, season_label = await _fetch_ranking_bundle(
             rank_type,
@@ -242,6 +316,8 @@ async def build_board_ranking_card(
             include_floor=include_floor,
         )
         tier_mode = _tier_mode_for_rank_type(rank_type)
+        summary = _format_board_ranking_ai_summary(board, floor, season_label, tier_mode, title_override)
+        emit_ai_text(summary)
         assets = await _build_assets(board, tier_mode)
         image = await render_ranking_card(
             board,
@@ -254,6 +330,7 @@ async def build_board_ranking_card(
         _cached_board_cards[cache_key] = _RankingCardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
             image=image,
+            summary=summary,
         )
         return image
 
@@ -269,13 +346,17 @@ async def build_roles_ranking_card(
     async with _roles_cache_lock:
         now = time.monotonic()
         if use_cache and cache_key in _cached_roles_cards and now < _cached_roles_cards[cache_key].expires_at:
-            return _cached_roles_cards[cache_key].image
+            cached = _cached_roles_cards[cache_key]
+            emit_ai_text(cached.summary)
+            return cached.image
 
         board, remote_roles = await asyncio.gather(
             fetch_roles_ranking(ranked_only=ranked_only),
             fetch_meta_roles(),
         )
         role_names = {**remote_roles, **get_role_display_names()}
+        summary = _format_roles_ranking_ai_summary(board, role_names, sort_by, ranked_only)
+        emit_ai_text(summary)
         role_ids = {entry["roleId"] for entry in board["entries"]}
         role_images = await _load_role_images(
             role_ids,
@@ -290,5 +371,6 @@ async def build_roles_ranking_card(
         _cached_roles_cards[cache_key] = _RankingCardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
             image=image,
+            summary=summary,
         )
         return image

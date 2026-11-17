@@ -12,6 +12,7 @@ from ..utils.helper.assets import (
     image_data_uri,
     local_banner_bg_image,
 )
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.api.biligame_wiki import (
     WikiActivityItem,
     beijing_now,
@@ -28,6 +29,7 @@ _DOWNLOAD_CONCURRENCY = 6
 class _CardCache:
     expires_at: float
     image: bytes
+    summary: str
 
 
 _timeline_cache_lock = asyncio.Lock()
@@ -67,16 +69,31 @@ async def _load_activity_images(
     return {name: uri for name, uri in zip(ordered_names, uris, strict=True)}
 
 
+def _format_activity_timeline_ai_summary(activities: list[WikiActivityItem]) -> str:
+    if not activities:
+        return "【卡拉彼丘进行中活动】当前暂无进行中的活动。"
+    lines: list[str] = [f"【卡拉彼丘当前进行中活动（共 {len(activities)} 项）】"]
+    for idx, item in enumerate(activities, start=1):
+        start_text = item.start_at.strftime("%Y-%m-%d %H:%M")
+        end_text = "常驻" if item.is_permanent else item.end_at.strftime("%Y-%m-%d %H:%M")
+        summary_note = f"｜{item.summary}" if item.summary else ""
+        lines.append(f"{idx}. {item.title}（{start_text} ~ {end_text}）{summary_note}")
+    return "\n".join(lines)
+
+
 async def build_event_timeline_card(*, use_cache: bool = True) -> bytes:
     """获取当前进行中活动并渲染时间轴卡片，带 5 分钟内存缓存。"""
     global _timeline_cached_card
     async with _timeline_cache_lock:
         mono_now = time.monotonic()
         if use_cache and _timeline_cached_card is not None and mono_now < _timeline_cached_card.expires_at:
+            emit_ai_text(_timeline_cached_card.summary)
             return _timeline_cached_card.image
 
         now = beijing_now()
         activities = await fetch_ongoing_activities(now)
+        summary = _format_activity_timeline_ai_summary(activities)
+        emit_ai_text(summary)
         await sync_reminders_from_activities(activities, now, allow_catchup_send=False)
         semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
         banner_path = local_banner_bg_image()
@@ -93,5 +110,6 @@ async def build_event_timeline_card(*, use_cache: bool = True) -> bytes:
         _timeline_cached_card = _CardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
             image=image,
+            summary=summary,
         )
         return image

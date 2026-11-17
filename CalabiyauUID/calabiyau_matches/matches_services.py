@@ -2,14 +2,16 @@
 
 import asyncio
 from pathlib import Path
+from datetime import datetime
 
 from gsuid_core.pool import to_thread
 from gsuid_core.models import Event
 
 from ..utils.api.dakanu import DakanuError, role_image_url
 from ..utils.downloader import resolve_image
-from ..utils.helper.maps import MapInfo, resolve_map
+from ..utils.helper.maps import MapInfo, resolve_map, resolve_role_name
 from ..utils.helper.assets import image_data_uri, local_role_image, local_avatar_image, local_map_slug_image
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.recent_matches import MatchView, load_recent_match_views
@@ -117,7 +119,38 @@ async def _build_assets(snapshot: PlayerSnapshot, views: list[MatchView]) -> Mat
     )
 
 
+def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[MatchView]) -> str:
+    """提取最近对局摘要供 AI 复盘及衔接单局详情或回放下载。"""
+    player = snapshot.profile["player"]
+    saved_time = datetime.fromtimestamp(snapshot.saved_at).strftime("%Y-%m-%d %H:%M")
+    lines: list[str] = [f"【{player['nickname']}（UID：{player['id']}）最近 {len(views)} 场历史战绩】"]
+    for idx, view in enumerate(views, start=1):
+        match = view.match
+        map_info = resolve_map(match["mapId"])
+        map_name = map_info.name if map_info is not None else f"地图#{match['mapId']}"
+        role_name = resolve_role_name(match["roleId"]) or f"角色#{match['roleId']}"
+        score_text = (
+            f"{match['myScore']}:{match['opponentScore']}"
+            if match["myScore"] is not None and match["opponentScore"] is not None
+            else "-"
+        )
+        delta_text = ""
+        if match["divisionScoreDelta"] is not None:
+            sign = "+" if match["divisionScoreDelta"] > 0 else ""
+            delta_text = f" 分数{sign}{match['divisionScoreDelta']}"
+        badge = " [MVP]" if match["mvp"] else (" [SVP]" if match["svp"] else "")
+        played_str = datetime.fromtimestamp(match["playedAt"] / 1000).strftime("%m-%d %H:%M")
+        lines.append(
+            f"{idx}. [{match['result']}] {match['modeLabel']} · {map_name} · {role_name} | "
+            f"比分 {score_text} | KDA {match['kills']}/{match['deaths']}/{match['assists']}{badge}{delta_text} | "
+            f"时长 {match['durationSeconds']}s | {played_str} | roomId={match['roomId']}"
+        )
+    lines.append(f"本地快照时间：{saved_time}")
+    return "\n".join(lines)
+
+
 async def build_recent_matches_card(player_id: str) -> bytes:
     snapshot, views = await _load_recent_matches_data(player_id)
+    emit_ai_text(format_recent_matches_ai_summary(snapshot, views))
     assets = await _build_assets(snapshot, views)
     return await render_matches_card(snapshot.profile, views, assets)

@@ -16,13 +16,16 @@ from ..utils.helper.assets import (
     local_challenge_tier_image,
 )
 from ..utils.helper.refresh import refresh_player_data
+from ..utils.helper.ai_bridge import emit_ai_text, format_player_snapshot_summary
 from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
 from ..utils.render.html.renderer.summary_card import (
     SummaryAssets,
     tier_index,
+    tier_display,
     render_summary_card,
+    challenge_tier_display,
     resolve_challenge_tier,
 )
 
@@ -52,7 +55,19 @@ async def ensure_player_snapshot(player_id: str, *, refresh: bool = False) -> Pl
     return (await refresh_player_data(player_id, force=refresh)).snapshot
 
 
+def format_snapshot_ai_summary(snapshot: PlayerSnapshot) -> str:
+    """从玩家快照提取供 AI 决策与复盘的结构化文本摘要。"""
+    challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])
+    challenge_label, _, _ = challenge_tier_display(challenge_tier)
+    return format_player_snapshot_summary(
+        snapshot,
+        tier_name_fn=lambda segment: tier_display(segment)[0],
+        challenge_label=challenge_label,
+    )
+
+
 async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
+    emit_ai_text(format_snapshot_ai_summary(snapshot))
     profile = snapshot.profile
     leisure = snapshot.leisure
     avatar_id = profile["player"]["avatarId"]

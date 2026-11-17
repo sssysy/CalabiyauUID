@@ -11,7 +11,19 @@ from ..utils.api.dakanu import DakanuError
 sv_banned = SV("卡拉彼丘封神榜")
 
 
-@sv_banned.on_command("封神榜", block=True)
+@sv_banned.on_command(
+    "封神榜",
+    block=True,
+    to_ai="""查询卡拉彼丘封神榜最新封号名单或检索指定玩家封禁记录
+
+    当用户想看最近封神榜名单，或查询某个玩家 UID/昵称是否被封号时调用。
+
+    Args:
+        text: 玩家纯数字 UID 或游戏昵称；留空则查询最新封神榜前 21 条记录，例如 "" 或 "1234567"
+    """,
+    covers=["卡拉彼丘封神榜最新封禁名单及按UID/昵称查询封号记录"],
+    aliases=["卡拉彼丘·封号查询", "卡拉彼丘·反作弊名单"],
+)
 async def calabiyau_banned(bot: Bot, ev: Event) -> None:
     query = ev.text.strip()
     try:

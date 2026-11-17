@@ -22,7 +22,23 @@ _RANGE_PARAM_MAP: dict[str, str] = {
 }
 
 
-@sv_activity.on_regex(r"^活跃图(?P<range>6h|24h|7d|30d|6小时|24小时|7天|30天)?$", block=True)
+@sv_activity.on_regex(
+    r"^活跃图(?P<range>6h|24h|7d|30d|6小时|24小时|7天|30天)?$",
+    block=True,
+    to_ai="""查询卡拉彼丘玩家活跃趋势曲线卡片与日活估算
+
+    当用户询问卡拉彼丘当前在线人数、日活、玩家活跃度趋势或近几天在线波动时调用。
+
+    Args:
+        text: 必须完整匹配格式 "活跃图[周期]"，可选周期为 6h/24h/7d/30d/6小时/24小时/7天/30天，例如：
+              - "活跃图24h"
+              - "活跃图7d"
+              - "活跃图30d"
+              - "活跃图"
+    """,
+    covers=["卡拉彼丘玩家在线活跃趋势曲线、日活与30日活跃估算"],
+    aliases=["卡拉彼丘·活跃趋势", "卡拉彼丘·在线人数"],
+)
 async def calabiyau_activity_trend(bot: Bot, ev: Event) -> None:
     raw_range = ev.regex_dict["range"] if "range" in ev.regex_dict else None
     range_key = _RANGE_PARAM_MAP[raw_range] if raw_range in _RANGE_PARAM_MAP else "24h"
@@ -39,7 +55,19 @@ async def calabiyau_activity_trend(bot: Bot, ev: Event) -> None:
     await bot.send(image)
 
 
-@sv_activity.on_fullmatch(("世界聊天", "世界频道"), block=True)
+@sv_activity.on_fullmatch(
+    ("世界聊天", "世界频道"),
+    block=True,
+    to_ai="""查询卡拉彼丘游戏内世界频道实时聊天动态
+
+    当用户想看当前卡拉彼丘世界频道大家在聊什么、实时公屏动态时调用。
+
+    Args:
+        text: 无需参数，留空即可
+    """,
+    covers=["卡拉彼丘游戏世界频道实时公屏聊天动态"],
+    aliases=["卡拉彼丘·世界频道动态", "卡拉彼丘·公屏聊天"],
+)
 async def calabiyau_world_chat(bot: Bot, ev: Event) -> None:
     try:
         image = await build_world_chat_card()

@@ -3,6 +3,7 @@
 import time
 import asyncio
 from pathlib import Path
+from datetime import datetime
 from dataclasses import dataclass
 
 from gsuid_core.pool import to_thread
@@ -10,6 +11,9 @@ from gsuid_core.logger import logger
 
 from ..utils.api.dakanu import (
     DakanuError,
+    DakanuChatMessage,
+    DakanuGameActivity,
+    DakanuChatAggregate,
     role_image_url,
     avatar_image_url,
     fetch_meta_roles,
@@ -25,6 +29,7 @@ from ..utils.helper.assets import (
     local_avatar_image,
     local_chat_emote_image,
 )
+from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.render.html.renderer.activity_card import render_activity_card
 from ..utils.render.html.renderer.world_chat_card import (
     DEFAULT_WORLD_CHAT_LIMIT,
@@ -42,6 +47,7 @@ _DOWNLOAD_CONCURRENCY = 8
 class _CardCache:
     expires_at: float
     image: bytes
+    summary: str
 
 
 _activity_cache_lock = asyncio.Lock()
@@ -126,6 +132,44 @@ async def _load_role_names(role_ids: set[int]) -> dict[int, str]:
     return {**remote_roles, **local_names}
 
 
+def _format_activity_ai_summary(activity: DakanuGameActivity) -> str:
+    est_points = activity["estimate"]["points"]
+    last_est = est_points[-1] if est_points else None
+    daily_text = f"{last_est['daily']:,}" if last_est is not None else "未知"
+    active30_text = f"{last_est['active30d']:,}" if last_est is not None else "未知"
+    pts = activity["points"]
+    if not pts:
+        return (
+            f"【卡拉彼丘玩家活跃趋势（{activity['range']} / {activity['region'].upper() or 'CN'}）】\n"
+            f"日活估算：{daily_text} | 30日活跃：{active30_text}\n暂无时序趋势数据。"
+        )
+    indices = [float(pt["index"]) for pt in pts]
+    latest_pt = pts[-1]
+    max_pt = max(pts, key=lambda pt: pt["index"])
+    min_pt = min(pts, key=lambda pt: pt["index"])
+    latest_time = datetime.fromtimestamp(latest_pt["at"]).strftime("%m-%d %H:%M")
+    max_time = datetime.fromtimestamp(max_pt["at"]).strftime("%m-%d %H:%M")
+    min_time = datetime.fromtimestamp(min_pt["at"]).strftime("%m-%d %H:%M")
+    avg_val = sum(indices) / len(indices)
+    return (
+        f"【卡拉彼丘玩家活跃趋势（{activity['range']} / {activity['region'].upper() or 'CN'}）】\n"
+        f"日活估算：{daily_text} | 30日活跃：{active30_text}\n"
+        f"最新活跃指数：{latest_pt['index']:.1f}（{latest_time}）| 均值：{avg_val:.1f} | "
+        f"峰值：{max_pt['index']:.1f}（{max_time}）| 谷值：{min_pt['index']:.1f}（{min_time}）"
+    )
+
+
+def _format_world_chat_ai_summary(aggregate: DakanuChatAggregate, recent_msgs: list[DakanuChatMessage]) -> str:
+    scope = aggregate["scope"]
+    lines: list[str] = [
+        f"【卡拉彼丘世界频道动态（活跃频道 {scope['active_channels']}/{scope['channel_count']}，展示最近 {len(recent_msgs)} 条）】"
+    ]
+    for msg in recent_msgs[:12]:
+        sent_time = datetime.fromtimestamp(msg["sent_at"]).strftime("%H:%M")
+        lines.append(f"[{sent_time} #{msg['channel']}频道] {msg['nick']}：{msg['message']}")
+    return "\n".join(lines)
+
+
 async def build_activity_card(
     range_key: str = "24h",
     *,
@@ -135,13 +179,18 @@ async def build_activity_card(
     async with _activity_cache_lock:
         now = time.monotonic()
         if use_cache and range_key in _activity_cached_cards and now < _activity_cached_cards[range_key].expires_at:
-            return _activity_cached_cards[range_key].image
+            cached = _activity_cached_cards[range_key]
+            emit_ai_text(cached.summary)
+            return cached.image
 
         activity = await fetch_game_activity(range_key)
+        summary = _format_activity_ai_summary(activity)
+        emit_ai_text(summary)
         image = await render_activity_card(activity)
         _activity_cached_cards[range_key] = _CardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
             image=image,
+            summary=summary,
         )
         return image
 
@@ -155,10 +204,14 @@ async def build_world_chat_card(
     async with _chat_cache_lock:
         now = time.monotonic()
         if use_cache and limit in _chat_cached_cards and now < _chat_cached_cards[limit].expires_at:
-            return _chat_cached_cards[limit].image
+            cached = _chat_cached_cards[limit]
+            emit_ai_text(cached.summary)
+            return cached.image
 
         aggregate = await fetch_chat_aggregate(limit_per_channel=30)
         recent_msgs = select_recent_messages(aggregate["messages"], limit=limit)
+        summary = _format_world_chat_ai_summary(aggregate, recent_msgs)
+        emit_ai_text(summary)
         avatar_ids, role_ids, emote_ids = collect_chat_asset_ids(recent_msgs)
 
         semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
@@ -178,5 +231,6 @@ async def build_world_chat_card(
         _chat_cached_cards[limit] = _CardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
             image=image,
+            summary=summary,
         )
         return image

@@ -12,7 +12,20 @@ from ..utils.helper.player_data import load_player_snapshot
 sv_stats = SV("卡拉彼丘战绩查询")
 
 
-@sv_stats.on_command("战绩总览", block=True)
+@sv_stats.on_command(
+    "战绩总览",
+    block=True,
+    to_ai="""查询卡拉彼丘玩家的生涯战绩总览卡片与数据摘要
+
+    当用户想看自己或指定玩家的卡拉彼丘战绩总览、段位、胜率、KD、常用超弦体或生成战绩卡片时调用。
+    仅读取本地快照；若提示没有缓存，需先征询或调用刷新/绑定工具。
+
+    Args:
+        text: 目标玩家 UID 或游戏昵称；留空则查询当前绑定主账号（如消息中@了他人则自动查被@者），例如 "" 或 "1234567"
+    """,
+    covers=["卡拉彼丘个人战绩总览卡片、排位/挑战段位、KD胜率及常用角色"],
+    aliases=["卡拉彼丘·战绩查询", "卡拉彼丘·个人主页"],
+)
 async def calabiyau_stats_summary(bot: Bot, ev: Event) -> None:
     player_id, error = await resolve_player_id(ev)
     if error is not None:
