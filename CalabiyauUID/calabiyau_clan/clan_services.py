@@ -123,8 +123,7 @@ def _format_clan_ai_summary(clan: DakanuClan, members: list[DakanuClanMember]) -
     leader_text = "、".join(leaders) if leaders else "未知"
     intro = clan["intro"].strip() or "暂无简介"
     member_preview = "、".join(
-        f"{member['nickname']}(Lv.{member['level'] if member['level'] is not None else '?'})"
-        for member in members[:10]
+        f"{member['nickname']}(Lv.{member['level'] if member['level'] is not None else '?'})" for member in members[:10]
     )
     lines: list[str] = [
         f"【战队信息：{clan['name']}（ID：{clan['clanId']}）】",

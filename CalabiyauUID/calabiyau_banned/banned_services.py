@@ -70,7 +70,9 @@ async def _load_avatar_images(
     entries: list[DakanuBannedEntry],
     semaphore: asyncio.Semaphore,
 ) -> dict[int, str]:
-    avatar_ids = sorted({entry["avatarId"] for entry in entries if entry["avatarId"] is not None and entry["avatarId"] > 0})
+    avatar_ids = sorted(
+        {entry["avatarId"] for entry in entries if entry["avatarId"] is not None and entry["avatarId"] > 0}
+    )
     if not avatar_ids:
         return {}
     uris = await asyncio.gather(*(_resolve_avatar_uri(avatar_id, semaphore) for avatar_id in avatar_ids))

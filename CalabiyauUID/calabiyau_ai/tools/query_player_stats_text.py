@@ -58,8 +58,7 @@ async def calabiyau_query_player_text(ev: Event, query: str = "") -> str:
     snapshot = await load_player_snapshot(player_id)
     if snapshot is None:
         return (
-            f"本地还没有 UID {player_id} 的战绩缓存。"
-            f"请先征询用户后调用刷新工具（kq刷新数据 {player_id}）拉取最新战绩。"
+            f"本地还没有 UID {player_id} 的战绩缓存。请先征询用户后调用刷新工具（kq刷新数据 {player_id}）拉取最新战绩。"
         )
 
     challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])

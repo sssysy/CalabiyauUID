@@ -273,9 +273,7 @@ def _format_roles_ranking_ai_summary(
         key=lambda item: (item["winRate"] if sort_by == "winRate" else item["appearanceRate"], item["games"]),
         reverse=True,
     )
-    lines: list[str] = [
-        f"【超弦体{metric}排行（{scope}，统计日 {board['day']}，覆盖 {board['coveredMatches']} 场）】"
-    ]
+    lines: list[str] = [f"【超弦体{metric}排行（{scope}，统计日 {board['day']}，覆盖 {board['coveredMatches']} 场）】"]
     lines.append("Top 5：")
     for idx, entry in enumerate(ordered[:5], start=1):
         name = role_names[entry["roleId"]] if entry["roleId"] in role_names else str(entry["roleId"])
