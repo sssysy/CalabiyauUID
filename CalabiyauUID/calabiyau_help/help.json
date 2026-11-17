@@ -205,6 +205,15 @@
                 "need_ck": false,
                 "need_sk": false,
                 "need_admin": false
+            },
+            {
+                "name": "封神榜",
+                "desc": "查看默认前 21 条封神榜，或附带昵称/UID 查询封禁信息",
+                "eg": "封神榜",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
             }
         ]
     },

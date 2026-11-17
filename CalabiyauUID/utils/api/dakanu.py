@@ -430,6 +430,33 @@ class DakanuLeisure(TypedDict, total=False):
     favoriteRoles: list[int]
 
 
+class DakanuBannedEntry(TypedDict):
+    entryKey: str
+    playerId: str | None
+    nickname: str
+    avatarId: int | None
+    level: int | None
+    segment: int | None
+    divisionScore: int | None
+    matchCount: int
+    maskedId: str
+    maskedNick: str
+    matched: bool
+    confidence: str
+    announcementTitle: str
+    announcementUrl: str
+    publishedAt: int | None
+
+
+class DakanuBannedResponse(TypedDict):
+    ok: bool
+    entries: list[DakanuBannedEntry]
+    total: int
+    offset: int
+    limit: int
+    hasMore: bool
+
+
 _ROLE_SLUGS: dict[int, str] = {
     101: "michele",
     105: "audrey",
@@ -1877,3 +1904,94 @@ async def fetch_clan_members(clan_id: str, *, refresh: bool = False) -> DakanuCl
     if result["members"]:
         return result
     raise DakanuError("正在同步战队成员名册，请稍后重试。")
+
+
+def _parse_banned_entry(raw: object) -> DakanuBannedEntry | None:
+    if not isinstance(raw, dict):
+        return None
+    entry_key = _opt_str(raw, "entryKey")
+    masked_id = _opt_str(raw, "maskedId")
+    masked_nick = _opt_str(raw, "maskedNick")
+    raw_nickname = _opt_str(raw, "nickname")
+    nickname = raw_nickname if raw_nickname is not None and raw_nickname else (masked_nick or "")
+    if entry_key is None or not nickname:
+        return None
+    matched = _opt_bool(raw, "matched")
+    match_count = _opt_int(raw, "matchCount")
+    confidence = _opt_str(raw, "confidence")
+    announcement_title = _opt_str(raw, "announcementTitle")
+    announcement_url = _opt_str(raw, "announcementUrl")
+    return {
+        "entryKey": entry_key,
+        "playerId": _opt_str(raw, "playerId"),
+        "nickname": nickname,
+        "avatarId": _opt_int(raw, "avatarId"),
+        "level": _opt_int(raw, "level"),
+        "segment": _opt_int(raw, "segment"),
+        "divisionScore": _opt_int(raw, "divisionScore"),
+        "matchCount": match_count if match_count is not None else 1,
+        "maskedId": masked_id if masked_id is not None else "",
+        "maskedNick": masked_nick if masked_nick is not None else "",
+        "matched": matched if matched is not None else False,
+        "confidence": confidence if confidence is not None else "",
+        "announcementTitle": announcement_title if announcement_title is not None else "",
+        "announcementUrl": announcement_url if announcement_url is not None else "",
+        "publishedAt": _opt_int(raw, "publishedAt"),
+    }
+
+
+def _parse_banned_response(payload: object) -> DakanuBannedResponse | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    raw_entries = payload["entries"] if "entries" in payload else None
+    total = _opt_int(payload, "total")
+    offset = _opt_int(payload, "offset")
+    limit = _opt_int(payload, "limit")
+    has_more = _opt_bool(payload, "hasMore")
+    if not isinstance(raw_entries, list) or total is None or offset is None or limit is None or has_more is None:
+        return None
+    entries: list[DakanuBannedEntry] = []
+    for item in raw_entries:
+        parsed = _parse_banned_entry(item)
+        if parsed is not None:
+            entries.append(parsed)
+    return {
+        "ok": True,
+        "entries": entries,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "hasMore": has_more,
+    }
+
+
+@to_thread
+def _fetch_banned_players_sync(offset: int, limit: int, query: str) -> DakanuBannedResponse:
+    params: dict[str, str] = {
+        "offset": str(max(0, offset)),
+        "limit": str(max(1, limit)),
+    }
+    cleaned = query.strip()
+    if cleaned:
+        params["q"] = cleaned
+    payload = _request_json_get(
+        "/api/banned-players",
+        params,
+        log_tag="[卡拉彼丘·封神榜]",
+        label="封神榜",
+    )
+    parsed = _parse_banned_response(payload)
+    if parsed is None:
+        logger.warning("[卡拉彼丘·封神榜] 封神榜响应结构异常")
+        raise DakanuError("封神榜数据格式异常，请稍后再试。")
+    return parsed
+
+
+async def fetch_banned_players(
+    *,
+    offset: int = 0,
+    limit: int = 21,
+    query: str = "",
+) -> DakanuBannedResponse:
+    """拉取封神榜列表或按昵称/UID 搜索封禁记录。"""
+    return await _fetch_banned_players_sync(offset, limit, query)
