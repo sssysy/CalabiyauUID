@@ -7,13 +7,13 @@ from gsuid_core.pool import to_thread
 from gsuid_core.models import Message
 from gsuid_core.segment import MessageSegment
 
+from ..calabiyau_config import CalabiyauConfig
 from ..utils.api.dakanu import (
     DakanuError,
     is_valid_room_id,
     fetch_replay_download_ticket,
 )
 from ..utils.downloader import download_replay, find_cached_replay
-from ..calabiyau_config.calabiyau_config import CalabiyauConfig
 
 _room_locks: dict[str, asyncio.Lock] = {}
 
