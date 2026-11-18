@@ -2,15 +2,22 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from collections.abc import Sequence
 
 from gsuid_core.aps import scheduler
 from gsuid_core.logger import logger
 from gsuid_core.models import Event, Message
-from gsuid_core.segment import MessageSegment
 from gsuid_core.subscribe import gs_subscribe
 from gsuid_core.utils.database.models import Subscribe
 
+from .subscribe_common import (
+    hours_until,
+    get_all_subscribers,
+    subscribe_scope_key,
+    build_dispatch_messages as _build_dispatch_messages,
+    dispatch_subscribe_text,
+    is_user_subscribed_for_task,
+    group_subscribers_for_dispatch as _group_subscribers_for_dispatch,
+)
 from ..api.biligame_wiki import (
     WikiError,
     WikiActivityItem,
@@ -22,53 +29,22 @@ from ..database.model_activity_remind import CalabiyauActivityRemind
 SUBSCRIBE_TASK_NAME = "订阅卡丘国服活动结束"
 REMIND_LEAD_TIME = timedelta(hours=24)
 _REMIND_JOB_PREFIX = "klbq_activity_remind_"
-_SEND_INTERVAL_SECONDS = 1.5
 _PRUNE_EXPIRED_SECONDS = 7 * 86400
+_DISPATCH_HEADER = "[卡丘活动结束订阅]"
 _LOG_TAG = "[卡拉彼丘·活动订阅]"
 
 _sync_lock = asyncio.Lock()
 _scheduled_items_by_end_ts: dict[int, list[WikiActivityItem]] = {}
 
 
-def subscribe_scope_key(ev: Event) -> str:
-    """区分群聊与私聊订阅作用域，避免同一用户在多群互覆。"""
-    if ev.user_type == "group" and ev.group_id:
-        return f"group:{ev.group_id}"
-    return "direct"
-
-
-def narrow_subscribe_rows(raw_rows: object) -> list[Subscribe]:
-    """将框架无泛型注解的订阅查询结果收窄为 Subscribe 列表。"""
-    if not isinstance(raw_rows, Sequence):
-        return []
-    return [row for row in raw_rows if isinstance(row, Subscribe)]
-
-
 async def get_all_activity_subscribers() -> list[Subscribe]:
     """读取全部活动结束订阅记录。"""
-    raw_rows: object = await gs_subscribe.get_subscribe(SUBSCRIBE_TASK_NAME)
-    return narrow_subscribe_rows(raw_rows)
+    return await get_all_subscribers(SUBSCRIBE_TASK_NAME)
 
 
 async def is_user_subscribed(ev: Event) -> bool:
     """判断当前用户在当前会话是否已订阅活动结束提醒。"""
-    scope_key = subscribe_scope_key(ev)
-    raw_rows: object = await gs_subscribe.get_subscribe(
-        SUBSCRIBE_TASK_NAME,
-        user_id=ev.user_id,
-        bot_id=ev.bot_id,
-        user_type=ev.user_type,
-        uid=scope_key,
-    )
-    rows = narrow_subscribe_rows(raw_rows)
-    if ev.user_type == "group" and ev.group_id:
-        return any(row.group_id == ev.group_id for row in rows)
-    return bool(rows)
-
-
-def _hours_left(end_at: datetime, now: datetime) -> int:
-    seconds = max(0.0, (end_at - now).total_seconds())
-    return max(1, round(seconds / 3600))
+    return await is_user_subscribed_for_task(SUBSCRIBE_TASK_NAME, ev)
 
 
 def build_reminder_body(items: list[WikiActivityItem], now: datetime) -> str:
@@ -82,7 +58,7 @@ def build_reminder_body(items: list[WikiActivityItem], now: datetime) -> str:
     blocks: list[str] = []
     for end_at in sorted(grouped.keys()):
         group_items = grouped[end_at]
-        hours_left = _hours_left(end_at, now)
+        hours_left = hours_until(end_at, now)
         lines = ["你订阅的以下活动："]
         lines.extend(f"· {item.title}" for item in group_items)
         lines.append(f"将于 {end_at.strftime('%Y-%m-%d %H:%M')} （剩余 {hours_left} 小时）结束，请确认游戏进度！")
@@ -98,7 +74,7 @@ def build_subscribe_receipt(already_ending: list[WikiActivityItem], now: datetim
     ordered = sorted(already_ending, key=lambda entry: (entry.end_at, entry.title))
     lines = [base, "", "当前已有即将结束的活动（本次订阅不补推）："]
     for item in ordered:
-        hours_left = _hours_left(item.end_at, now)
+        hours_left = hours_until(item.end_at, now)
         lines.append(f"· {item.title}（{item.end_at.strftime('%Y-%m-%d %H:%M')} 结束，剩余 {hours_left} 小时）")
     return "\n".join(lines)
 
@@ -107,38 +83,12 @@ def group_subscribers_for_dispatch(
     subscribers: list[Subscribe],
 ) -> list[tuple[Subscribe, list[str]]]:
     """同群多用户合并为一条消息并汇总需 @ 的用户列表，私聊不带 @。"""
-    targets: list[tuple[Subscribe, list[str]]] = []
-    group_index: dict[tuple[str, str, str], int] = {}
-    direct_seen: set[tuple[str, str, str]] = set()
-
-    for sub in subscribers:
-        ws_id = sub.WS_BOT_ID if sub.WS_BOT_ID else ""
-        if sub.user_type == "group" and sub.group_id:
-            key = (ws_id, sub.bot_id, sub.group_id)
-            if key not in group_index:
-                group_index[key] = len(targets)
-                user_ids = [sub.user_id] if sub.user_id else []
-                targets.append((sub, user_ids))
-            else:
-                target_users = targets[group_index[key]][1]
-                if sub.user_id and sub.user_id not in target_users:
-                    target_users.append(sub.user_id)
-        else:
-            direct_key = (ws_id, sub.bot_id, sub.user_id)
-            if direct_key not in direct_seen:
-                direct_seen.add(direct_key)
-                targets.append((sub, []))
-    return targets
+    return _group_subscribers_for_dispatch(subscribers)
 
 
 def build_dispatch_messages(body: str, at_user_ids: list[str]) -> list[Message]:
     """构建最终发送的消息段列表；私聊传入空列表即可省略 @。"""
-    segments: list[Message] = []
-    for user_id in at_user_ids:
-        segments.append(MessageSegment.at(user_id))
-        segments.append(MessageSegment.text(" "))
-    segments.append(MessageSegment.text(f"[卡丘活动结束订阅]\n{body}"))
-    return segments
+    return _build_dispatch_messages(body, at_user_ids, header=_DISPATCH_HEADER)
 
 
 async def dispatch_activity_reminders(
@@ -150,21 +100,12 @@ async def dispatch_activity_reminders(
     if not items or not subscribers:
         return False
     body = build_reminder_body(items, now)
-    targets = group_subscribers_for_dispatch(subscribers)
-    any_sent = False
-
-    for index, (sub, at_user_ids) in enumerate(targets):
-        if index > 0:
-            await asyncio.sleep(_SEND_INTERVAL_SECONDS)
-        messages = build_dispatch_messages(body, at_user_ids)
-        try:
-            retcode = await sub.send(messages)
-        except (OSError, RuntimeError, TimeoutError) as exc:
-            logger.warning(f"{_LOG_TAG} 推送订阅消息失败（group={sub.group_id}, user={sub.user_id}）：{exc}")
-            continue
-        if retcode == 0:
-            any_sent = True
-    return any_sent
+    return await dispatch_subscribe_text(
+        subscribers,
+        header=_DISPATCH_HEADER,
+        body=body,
+        log_tag=_LOG_TAG,
+    )
 
 
 def _clear_reminder_jobs(keep_job_ids: set[str]) -> None:

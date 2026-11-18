@@ -1,34 +1,9 @@
 """卡拉彼丘兑换码数据拉取与文本格式化。"""
 
-import re
-
 from ..utils.api.biligame_wiki import WikiRedeemCodeItem, fetch_active_redeem_codes
+from ..utils.helper.cdkey_remind import format_redeem_rewards
 
-_REWARD_SPLIT_RE = re.compile(r"[,，]\s*")
 _EMPTY_REDEEM_CODES_TEXT = "暂时没有可用的兑换码喵~"
-
-
-def format_redeem_rewards(raw_rewards: str) -> str:
-    """将 Wiki 奖励内容字符串格式化为 `道具 x 数量` 列表。"""
-    cleaned = raw_rewards.strip()
-    if not cleaned:
-        return "未知"
-
-    formatted: list[str] = []
-    for segment in _REWARD_SPLIT_RE.split(cleaned):
-        part = segment.strip()
-        if not part:
-            continue
-        if "*" in part:
-            name, quantity = part.split("*", 1)
-            item_name = name.strip()
-            item_quantity = quantity.strip() or "1"
-        else:
-            item_name = part
-            item_quantity = "1"
-        if item_name:
-            formatted.append(f"{item_name} x {item_quantity}")
-    return ", ".join(formatted) if formatted else "未知"
 
 
 def format_redeem_codes_text(items: list[WikiRedeemCodeItem]) -> str:
