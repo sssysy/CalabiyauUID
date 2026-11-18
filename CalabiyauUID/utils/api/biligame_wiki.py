@@ -317,7 +317,7 @@ async def fetch_ongoing_activities(now: datetime | None = None) -> list[WikiActi
 
 
 async def fetch_active_redeem_codes(now: datetime | None = None) -> list[WikiRedeemCodeItem]:
-    """获取当前未失效的兑换码列表（2099 年占位时间视为常驻）。"""
+    """获取当前未失效的兑换码列表（2099 年占位时间表示未知或无明确截止时间）。"""
     current = now.astimezone(_BEIJING_TZ) if now is not None else beijing_now()
     # 按前一天起算做服务端粗筛，避免凌晨边界被 SMW 日期截断
     cutoff_date = (current - timedelta(days=1)).strftime("%Y-%m-%d")

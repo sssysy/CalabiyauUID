@@ -70,15 +70,22 @@ async def is_user_cdkey_subscribed(ev: Event) -> bool:
     return await is_user_subscribed_for_task(SUBSCRIBE_TASK_NAME, ev)
 
 
+def format_cdkey_entry_lines(item: WikiRedeemCodeItem) -> list[str]:
+    """格式化单条兑换码的展示文本行（2099 占位时间统一显示为未知）。"""
+    expiry_text = "未知" if item.is_permanent else item.expires_at.strftime("%Y-%m-%d %H:%M")
+    rewards_text = format_redeem_rewards(item.rewards)
+    return [
+        f"· 【{item.code}】有效期至：{expiry_text}",
+        f"    内含：{rewards_text}",
+    ]
+
+
 def build_new_cdkey_body(items: list[WikiRedeemCodeItem]) -> str:
     """构建新上线兑换码推送正文。"""
     ordered = sorted(items, key=lambda entry: (entry.is_permanent, entry.expires_at, entry.code))
     lines: list[str] = ["发现新的卡拉彼丘兑换码："]
     for item in ordered:
-        expiry_text = "常驻" if item.is_permanent else item.expires_at.strftime("%Y-%m-%d %H:%M")
-        rewards_text = format_redeem_rewards(item.rewards)
-        lines.append(f"· 【{item.code}】有效期至：{expiry_text}")
-        lines.append(f"    内含：{rewards_text}")
+        lines.extend(format_cdkey_entry_lines(item))
     return "\n".join(lines)
 
 
@@ -111,10 +118,7 @@ def build_cdkey_subscribe_receipt(items: list[WikiRedeemCodeItem]) -> str:
     ordered = sorted(items, key=lambda entry: (entry.is_permanent, entry.expires_at, entry.code))
     lines = [base, "", "当前可用兑换码（本次订阅不重复推送）："]
     for item in ordered:
-        expiry_text = "常驻" if item.is_permanent else item.expires_at.strftime("%Y-%m-%d %H:%M")
-        rewards_text = format_redeem_rewards(item.rewards)
-        lines.append(f"· 【{item.code}】有效期至：{expiry_text}")
-        lines.append(f"    内含：{rewards_text}")
+        lines.extend(format_cdkey_entry_lines(item))
     return "\n".join(lines)
 
 

@@ -1,7 +1,7 @@
 """卡拉彼丘兑换码数据拉取与文本格式化。"""
 
 from ..utils.api.biligame_wiki import WikiRedeemCodeItem, fetch_active_redeem_codes
-from ..utils.helper.cdkey_remind import format_redeem_rewards
+from ..utils.helper.cdkey_remind import format_cdkey_entry_lines
 
 _EMPTY_REDEEM_CODES_TEXT = "暂时没有可用的兑换码喵~"
 
@@ -13,10 +13,7 @@ def format_redeem_codes_text(items: list[WikiRedeemCodeItem]) -> str:
 
     lines: list[str] = ["[卡拉彼丘兑换码]"]
     for item in items:
-        expiry_text = "常驻" if item.is_permanent else item.expires_at.strftime("%Y-%m-%d %H:%M")
-        rewards_text = format_redeem_rewards(item.rewards)
-        lines.append(f"· 【{item.code}】有效期至：{expiry_text}")
-        lines.append(f"    内含：{rewards_text}")
+        lines.extend(format_cdkey_entry_lines(item))
     return "\n".join(lines)
 
 
