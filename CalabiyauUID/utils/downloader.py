@@ -7,12 +7,11 @@ import httpx
 
 from gsuid_core.utils.download_resource.download_file import download as download_file
 
-from .utils.paths import DATA_DIR
+from .utils.paths import CACHE_DIR, IMG_CACHE_DIR
 
-IMG_CACHE_DIR: Path = DATA_DIR / "img_cache"
 IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-REPLAY_CACHE_DIR: Path = DATA_DIR / "cache" / "replay"
+REPLAY_CACHE_DIR: Path = CACHE_DIR / "replay"
 REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})

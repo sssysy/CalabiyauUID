@@ -6,9 +6,9 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from gsuid_core.pool import to_thread
-from gsuid_core.data_store import get_res_path
 
 from ..api.dakanu import DakanuClan, DakanuLeisure, DakanuProfile
+from ..utils.paths import PLAYER_DATA_DIR
 
 
 class DakanuSnapshotPayload(TypedDict):
@@ -25,7 +25,7 @@ class DakanuSnapshotRaw(TypedDict):
     saved_at: object
 
 
-PLAYER_DATA_DIR: Path = get_res_path(["CalabiyauUID", "player_data"])
+PLAYER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass(frozen=True)
