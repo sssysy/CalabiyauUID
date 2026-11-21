@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对局分析</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #1e293b;
+  color: #0f172a;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+}
+.num { font-family: "Mono", Consolas, monospace; }
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
+}
+.card {
+  width: 100%;
+  background: rgba(255, 255, 255, .44);
+  backdrop-filter: blur(18px);
+  border-radius: 10px;
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.meta-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .32);
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.meta-sep { color: #64748b; }
+
+.summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .28);
+}
+.team-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.team-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.team-bar-left {
+  width: 112px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.side-tag {
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+}
+.side-tag--blue { background: #2563eb; }
+.side-tag--red { background: #dc2626; }
+.wl-tag {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.wl-tag--win { background: #f59e0b; color: #ffffff; }
+.wl-tag--lose { background: rgba(100, 116, 139, 0.24); color: #475569; }
+
+.sum-head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+.team-body {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.score-box {
+  width: 112px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: transparent;
+}
+.score-box--blue { color: #2563eb; }
+.score-box--red { color: #dc2626; }
+.faction-bg {
+  position: absolute;
+  width: 96px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.faction-img {
+  width: 92px;
+  height: 120px;
+  object-fit: contain;
+  display: block;
+}
+.big-score {
+  position: relative;
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sum-rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sum-row {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+.sum-row--blue { background: rgba(37, 99, 235, 0.16); }
+.sum-row--blue.is-award { background: rgba(37, 99, 235, 0.25); }
+.sum-row--red { background: rgba(220, 38, 38, 0.16); }
+.sum-row--red.is-award { background: rgba(220, 38, 38, 0.25); }
+
+.col-player {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.role-ava {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.25);
+}
+.role-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pname {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.award {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: italic;
+}
+.award-mvp { background: #f59e0b; color: #ffffff; }
+.award-svp { background: #64748b; color: #ffffff; }
+
+.col-kda { width: 92px; flex: none; text-align: center; font-weight: 600; }
+.col-dmg { width: 62px; flex: none; text-align: right; font-weight: 600; }
+.col-acc { width: 62px; flex: none; text-align: right; }
+.col-hs { width: 62px; flex: none; text-align: right; }
+.col-sc { width: 50px; flex: none; text-align: right; color: #334155; }
+.col-tot { width: 52px; flex: none; text-align: right; font-weight: 700; color: #0f172a; }
+
+.round-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  background: transparent;
+}
+.strip-labels {
+  width: 112px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.strip-team-lbl {
+  height: 22px;
+  line-height: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  padding-left: 8px;
+}
+.strip-lbl-a { color: #1d4ed8; }
+.strip-lbl-b { color: #b91c1c; }
+.strip-track {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.strip-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.strip-rnum {
+  height: 16px;
+  line-height: 16px;
+  font-size: 10.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+.strip-cell {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.45);
+  display: block;
+}
+.strip-divider {
+  width: 2px;
+  height: 52px;
+  background: rgba(100, 116, 139, 0.42);
+  flex: none;
+  margin: 0 4px;
+  border-radius: 1px;
+}
+
+.rounds-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.legend-def { background: rgba(37, 99, 235, 0.14); color: #1d4ed8; }
+.legend-atk { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+
+.rounds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.round-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.26);
+}
+.round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.round-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.round-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.round-phase {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.08);
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 600;
+}
+.round-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.round-score { font-weight: 700; color: #0f172a; font-size: 13px; }
+.round-dur { color: #475569; }
+
+.round-cols {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+.r-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: transparent;
+}
+
+.r-col-head {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.r-col-head--blue { color: #1e40af; }
+.r-col-head--red { color: #991b1b; }
+.r-col-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rcol-win {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #f59e0b;
+}
+
+.r-prows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.r-prow {
+  display: flex;
+  align-items: center;
+  height: 29px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.r-prow--blue { background: rgba(37, 99, 235, 0.18); }
+.r-prow--blue.is-dead { background: rgba(37, 99, 235, 0.11); }
+.r-prow--red { background: rgba(220, 38, 38, 0.18); }
+.r-prow--red.is-dead { background: rgba(220, 38, 38, 0.11); }
+.rc-player {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.r-ava {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.25);
+}
+.r-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.r-pname {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-kda { width: 54px; flex: none; text-align: center; font-weight: 600; }
+.rc-dmg { width: 46px; flex: none; text-align: right; font-weight: 600; }
+.rc-acc { width: 54px; flex: none; text-align: right; }
+.rc-hs { width: 54px; flex: none; text-align: right; color: #475569; }
+
+.footer {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  padding: 12px 10px 0;
+  font-weight: 500;
+}
+</style>
+</head>
+<body>
+{% macro win_icon(reason, color) %}
+{% if reason == "bombed" %}
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 3.5L13.5 3.5L8 13L2.5 3.5Z" stroke="{{ color }}" stroke-width="1.8" stroke-linejoin="round"/><path d="M5.7 5.6L10.3 5.6L8 9.7L5.7 5.6Z" fill="{{ color }}"/></svg>
+{% elif reason == "removed" %}
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L13 4.2V8.2C13 11.2 10.9 13.4 8 14.3C5.1 13.4 3 11.2 3 8.2V4.2L8 2Z" stroke="{{ color }}" stroke-width="1.7" stroke-linejoin="round"/><path d="M5.6 8.2L7.3 9.9L10.6 6.4" stroke="{{ color }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{% elif reason == "timeout" %}
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.6" stroke="{{ color }}" stroke-width="1.7"/><path d="M8 5V8.3L10.3 9.6" stroke="{{ color }}" stroke-width="1.7" stroke-linecap="round"/></svg>
+{% else %}
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" stroke="{{ color }}" stroke-width="2.1" stroke-linecap="round"/></svg>
+{% endif %}
+{% endmacro %}
+
+{% macro summary_team(team) %}
+<div class="team-block">
+  <div class="team-bar">
+    <div class="team-bar-left">
+      <span class="side-tag side-tag--{{ team.theme }}">{{ team.label }} · {{ team.faction_label }}</span>
+      <span class="wl-tag wl-tag--{{ 'win' if team.is_winner else 'lose' }}">{{ team.result_label }}</span>
+    </div>
+    <div class="sum-head">
+      <div class="col-player">玩家</div>
+      <div class="col-kda">击败/阵亡/助攻</div>
+      <div class="col-dmg">伤害</div>
+      <div class="col-acc">命中率</div>
+      <div class="col-hs">爆头率</div>
+      <div class="col-sc">输出分</div>
+      <div class="col-sc">技能分</div>
+      <div class="col-sc">协作分</div>
+      <div class="col-tot">总分</div>
+    </div>
+  </div>
+  <div class="team-body">
+    <div class="score-box score-box--{{ team.theme }}">
+      <div class="faction-bg">
+        {% if team.faction_uri %}<img class="faction-img" src="{{ team.faction_uri }}" alt="">{% endif %}
+      </div>
+      <div class="big-score num">{{ team.wins }}</div>
+    </div>
+    <div class="sum-rows">
+      {% for row in team.players %}
+      <div class="sum-row sum-row--{{ team.theme }}{% if row.mvp or row.svp %} is-award{% endif %}">
+        <div class="col-player">
+          <div class="role-ava">{% if row.role_uri %}<img src="{{ row.role_uri }}" alt="">{% endif %}</div>
+          <div class="pname">{{ row.nickname }}</div>
+          {% if row.mvp %}<span class="award award-mvp">MVP</span>{% elif row.svp %}<span class="award award-svp">SVP</span>{% endif %}
+        </div>
+        <div class="col-kda num">{{ row.kills }} / {{ row.deaths }} / {{ row.assists }}</div>
+        <div class="col-dmg num">{{ row.damage }}</div>
+        <div class="col-acc num">{{ row.accuracy }}</div>
+        <div class="col-hs num">{{ row.headshot_rate }}</div>
+        <div class="col-sc num">{{ row.personal_score }}</div>
+        <div class="col-sc num">{{ row.strategy_score }}</div>
+        <div class="col-sc num">{{ row.teamwork_score }}</div>
+        <div class="col-tot num">{{ row.total_score }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro round_team_col(col) %}
+<div class="r-col">
+  <div class="r-col-head r-col-head--{{ col.theme }}">
+    <div class="rc-player r-col-title">
+      <span>{{ col.team_label }} · {{ col.side_label }}</span>
+      {% if col.is_winner %}<span class="rcol-win">胜</span>{% endif %}
+    </div>
+    <div class="rc-kda">K/D/A</div>
+    <div class="rc-dmg">伤害</div>
+    <div class="rc-acc">命中率</div>
+    <div class="rc-hs">爆头率</div>
+  </div>
+  <div class="r-prows">
+    {% for row in col.players %}
+    <div class="r-prow r-prow--{{ col.theme }}{% if row.is_dead %} is-dead{% endif %}">
+      <div class="rc-player">
+        <div class="r-ava">{% if row.role_uri %}<img src="{{ row.role_uri }}" alt="">{% endif %}</div>
+        <div class="r-pname">{{ row.nickname }}</div>
+      </div>
+      <div class="rc-kda num">{{ row.kills }}/{{ row.deaths }}/{{ row.assists }}</div>
+      <div class="rc-dmg num">{{ row.damage }}</div>
+      <div class="rc-acc num">{{ row.accuracy }}</div>
+      <div class="rc-hs num">{{ row.headshot_rate }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+<div class="wrap">
+  <div class="card">
+    <div class="header">
+      <div class="title">对局分析</div>
+      <div class="meta-pill">
+        <span>{{ data.mode_label }}</span>
+        <span class="meta-sep">·</span>
+        <span class="num">时长 {{ data.duration_text }}</span>
+        <span class="meta-sep">·</span>
+        <span class="num">局号 {{ data.room_id }}</span>
+      </div>
+    </div>
+
+    <div class="summary-section">
+      {{ summary_team(data.team_a) }}
+      <div class="round-strip">
+        <div class="strip-labels">
+          <div class="strip-rnum">&nbsp;</div>
+          <div class="strip-team-lbl strip-lbl-a">{{ data.team_a.label }}</div>
+          <div class="strip-team-lbl strip-lbl-b">{{ data.team_b.label }}</div>
+        </div>
+        <div class="strip-track">
+          {% for item in data.strip_items %}
+          {% if item.divider_before %}<div class="strip-divider"></div>{% endif %}
+          <div class="strip-col">
+            <div class="strip-rnum num">{{ item.round_index }}</div>
+            <div class="strip-cell">
+              {% if item.winner_slot == "a" %}{{ win_icon(item.reason, item.winner_color) }}{% else %}<span class="dot"></span>{% endif %}
+            </div>
+            <div class="strip-cell">
+              {% if item.winner_slot == "b" %}{{ win_icon(item.reason, item.winner_color) }}{% else %}<span class="dot"></span>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ summary_team(data.team_b) }}
+    </div>
+
+    {% if data.rounds %}
+    <div class="rounds-header">
+      <div class="section-title">回合明细</div>
+      <div class="legend">
+        <span class="legend-item legend-def">蓝色 · 防守</span>
+        <span class="legend-item legend-atk">红色 · 进攻</span>
+      </div>
+    </div>
+
+    <div class="rounds-list">
+      {% for round_item in data.rounds %}
+      <div class="round-card">
+        <div class="round-head">
+          <div class="round-head-left">
+            <span class="round-num">第 {{ round_item.round_index }} 回合</span>
+            {% if round_item.phase_label %}<span class="round-phase">{{ round_item.phase_label }}</span>{% endif %}
+          </div>
+          <div class="round-head-right num">
+            <span class="round-score">{{ round_item.score_text }}</span>
+            <span class="round-dur">{{ round_item.duration_text }}</span>
+          </div>
+        </div>
+        <div class="round-cols">
+          {{ round_team_col(round_item.team_a) }}
+          {{ round_team_col(round_item.team_b) }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

@@ -197,11 +197,14 @@ class DakanuMatchTeam(TypedDict):
     id: str
     label: str
     players: list[DakanuMatchPlayer]
+    side: NotRequired[str]
+    sideLabel: NotRequired[str]
 
 
 class DakanuMatchDetail(TypedDict, total=False):
     ok: bool
     roomId: str
+    matchMode: str
     summary: object | None
     teams: list[DakanuMatchTeam]
     rounds: list[object]
@@ -577,10 +580,15 @@ def _is_match_detail_response(value: object) -> bool:
 
 
 @to_thread
-def _fetch_match_detail_sync(player_id: str, room_id: str) -> DakanuMatchDetail | None:
-    url = f"{BASE_URL}/api/match/{room_id}"
-    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-        response = client.get(url, params={"player": player_id})
+def _fetch_match_detail_sync(player_id: str | None, room_id: str) -> DakanuMatchDetail | None:
+    url = f"{BASE_URL}/api/match-detail/{room_id}"
+    params: dict[str, str] = {"player": player_id} if player_id else {}
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(url, params=params, headers={"X-Karabi-Region": "cn"})
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·最近对局] 读取对局 {room_id} 详情失败：{exc}")
+        return None
     if response.status_code == 404:
         return None
     if response.status_code == 429:
@@ -602,7 +610,7 @@ def _fetch_match_detail_sync(player_id: str, room_id: str) -> DakanuMatchDetail 
     return details
 
 
-async def fetch_match_detail(player_id: str, room_id: str) -> DakanuMatchDetail | None:
+async def fetch_match_detail(player_id: str | None, room_id: str) -> DakanuMatchDetail | None:
     """读取单场对局详情；无详情时返回 None。"""
     return await _fetch_match_detail_sync(player_id, room_id)
 
@@ -2431,3 +2439,564 @@ async def fetch_banned_players(
 ) -> DakanuBannedResponse:
     """拉取封神榜列表或按昵称/UID 搜索封禁记录。"""
     return await _fetch_banned_players_sync(offset, limit, query)
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsObservedScores:
+    score: float
+    personal_score: float
+    strategy_score: float
+    teamwork_score: float
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsPlayer:
+    player_id: str
+    nickname: str
+    team_id: str
+    role_id: int | None
+    kills: int
+    deaths: int
+    assists: int
+    knockdowns: int
+    damage: int
+    head_hits: int
+    observed_scores: DakanuStatsObservedScores | None
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsTeam:
+    team_id: str
+    player_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsRoundPlayer:
+    player_id: str
+    kills: int
+    deaths: int
+    assists: int
+    knockdowns: int
+    damage: int
+    head_hits: int
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsRound:
+    index: int
+    start_ms: int
+    end_ms: int
+    players: tuple[DakanuStatsRoundPlayer, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsRoundResult:
+    round_index: int
+    winner_team_id: str | None
+    end_reason: str
+    phase: str
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsEvent:
+    event_type: str
+    at_ms: int
+    round_index: int | None
+    player_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsBombEvent:
+    at_ms: int
+    round_index: int | None
+    player_id: str
+    stage: str
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsPhasePoint:
+    at_ms: int
+    phase: str
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsRoleEvent:
+    at_ms: int
+    order: int
+    player_id: str
+    role_id: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsAccuracy:
+    player_id: str
+    projectile_accuracy: float | None
+    headshot_rate: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuStatsRoundAccuracy:
+    index: int
+    players: tuple[DakanuStatsAccuracy, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DakanuMatchStatistics:
+    room_id: str
+    duration_ms: int
+    teams: tuple[DakanuStatsTeam, ...]
+    players: tuple[DakanuStatsPlayer, ...]
+    rounds: tuple[DakanuStatsRound, ...]
+    round_results: tuple[DakanuStatsRoundResult, ...]
+    events: tuple[DakanuStatsEvent, ...]
+    bomb_events: tuple[DakanuStatsBombEvent, ...]
+    phase_timeline: tuple[DakanuStatsPhasePoint, ...]
+    role_timeline: tuple[DakanuStatsRoleEvent, ...]
+    overall_accuracy: tuple[DakanuStatsAccuracy, ...]
+    round_accuracy: tuple[DakanuStatsRoundAccuracy, ...]
+
+
+def _opt_id_str(mapping: dict[object, object], key: str) -> str | None:
+    if key not in mapping:
+        return None
+    raw = mapping[key]
+    if isinstance(raw, str):
+        cleaned = raw.strip()
+        return cleaned if cleaned else None
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return str(raw)
+    return None
+
+
+def _parse_stats_observed_scores(raw: object) -> DakanuStatsObservedScores | None:
+    if not isinstance(raw, dict):
+        return None
+    score = _opt_float(raw, "score")
+    personal = _opt_float(raw, "personal_score")
+    strategy = _opt_float(raw, "strategy_score")
+    teamwork = _opt_float(raw, "teamwork_score")
+    if score is None and personal is None and strategy is None and teamwork is None:
+        return None
+    return DakanuStatsObservedScores(
+        score=score if score is not None else 0.0,
+        personal_score=personal if personal is not None else 0.0,
+        strategy_score=strategy if strategy is not None else 0.0,
+        teamwork_score=teamwork if teamwork is not None else 0.0,
+    )
+
+
+def _parse_stats_players(raw_list: object) -> tuple[DakanuStatsPlayer, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsPlayer] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        player_id = _opt_id_str(item, "player_id")
+        if player_id is None:
+            continue
+        nickname = _opt_str(item, "nickname")
+        team_id = _opt_id_str(item, "team_id")
+        role_id = _opt_int(item, "role_id")
+        kills = _opt_int(item, "kills")
+        deaths = _opt_int(item, "deaths")
+        assists = _opt_int(item, "assists")
+        knockdowns = _opt_int(item, "knockdowns")
+        damage = _opt_int(item, "damage")
+        head_hits = _opt_int(item, "head_hits")
+        scores = _parse_stats_observed_scores(item["observed_scores"]) if "observed_scores" in item else None
+        result.append(
+            DakanuStatsPlayer(
+                player_id=player_id,
+                nickname=nickname if nickname is not None else player_id,
+                team_id=team_id if team_id is not None else "",
+                role_id=role_id if role_id is not None and role_id > 0 else None,
+                kills=kills if kills is not None else 0,
+                deaths=deaths if deaths is not None else 0,
+                assists=assists if assists is not None else 0,
+                knockdowns=knockdowns if knockdowns is not None else 0,
+                damage=damage if damage is not None else 0,
+                head_hits=head_hits if head_hits is not None else 0,
+                observed_scores=scores,
+            )
+        )
+    return tuple(result)
+
+
+def _parse_stats_teams(raw_list: object) -> tuple[DakanuStatsTeam, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsTeam] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        team_id = _opt_id_str(item, "team_id")
+        if team_id is None or "player_ids" not in item or not isinstance(item["player_ids"], list):
+            continue
+        player_ids: list[str] = []
+        for raw_pid in item["player_ids"]:
+            if isinstance(raw_pid, str) and raw_pid.strip():
+                player_ids.append(raw_pid.strip())
+            elif isinstance(raw_pid, int) and not isinstance(raw_pid, bool):
+                player_ids.append(str(raw_pid))
+        result.append(DakanuStatsTeam(team_id=team_id, player_ids=tuple(player_ids)))
+    return tuple(result)
+
+
+def _parse_stats_rounds(raw_list: object) -> tuple[DakanuStatsRound, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsRound] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        index = _opt_int(item, "index")
+        start_ms = _opt_int(item, "start_ms")
+        end_ms = _opt_int(item, "end_ms")
+        if index is None or start_ms is None or end_ms is None:
+            continue
+        players: list[DakanuStatsRoundPlayer] = []
+        if "players" in item and isinstance(item["players"], list):
+            for raw_player in item["players"]:
+                if not isinstance(raw_player, dict):
+                    continue
+                player_id = _opt_id_str(raw_player, "player_id")
+                if player_id is None:
+                    continue
+                kills = _opt_int(raw_player, "kills")
+                deaths = _opt_int(raw_player, "deaths")
+                assists = _opt_int(raw_player, "assists")
+                knockdowns = _opt_int(raw_player, "knockdowns")
+                damage = _opt_int(raw_player, "damage")
+                head_hits = _opt_int(raw_player, "head_hits")
+                players.append(
+                    DakanuStatsRoundPlayer(
+                        player_id=player_id,
+                        kills=kills if kills is not None else 0,
+                        deaths=deaths if deaths is not None else 0,
+                        assists=assists if assists is not None else 0,
+                        knockdowns=knockdowns if knockdowns is not None else 0,
+                        damage=damage if damage is not None else 0,
+                        head_hits=head_hits if head_hits is not None else 0,
+                    )
+                )
+        result.append(
+            DakanuStatsRound(
+                index=index,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                players=tuple(players),
+            )
+        )
+    result.sort(key=lambda item: item.index)
+    return tuple(result)
+
+
+def _parse_stats_round_results(raw_list: object) -> tuple[DakanuStatsRoundResult, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsRoundResult] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        round_index = _opt_int(item, "round")
+        if round_index is None:
+            continue
+        winner_team_id = _opt_id_str(item, "winner_team_id")
+        end_reason = _opt_str(item, "end_reason")
+        phase = _opt_str(item, "phase")
+        result.append(
+            DakanuStatsRoundResult(
+                round_index=round_index,
+                winner_team_id=winner_team_id,
+                end_reason=end_reason if end_reason is not None else "",
+                phase=phase if phase is not None else "",
+            )
+        )
+    return tuple(result)
+
+
+def _parse_stats_events(raw_list: object) -> tuple[DakanuStatsEvent, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsEvent] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        event_type = _opt_str(item, "type")
+        at_ms = _opt_int(item, "at_ms")
+        player_id = _opt_id_str(item, "player_id")
+        if event_type is None or at_ms is None or player_id is None:
+            continue
+        round_index = _opt_int(item, "round")
+        result.append(
+            DakanuStatsEvent(
+                event_type=event_type,
+                at_ms=at_ms,
+                round_index=round_index,
+                player_id=player_id,
+            )
+        )
+    result.sort(key=lambda item: item.at_ms)
+    return tuple(result)
+
+
+def _parse_stats_bomb_events(raw_list: object) -> tuple[DakanuStatsBombEvent, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsBombEvent] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        at_ms = _opt_int(item, "at_ms")
+        player_id = _opt_id_str(item, "player_id")
+        stage = _opt_str(item, "stage")
+        if at_ms is None or player_id is None or stage is None:
+            continue
+        round_index = _opt_int(item, "round")
+        result.append(
+            DakanuStatsBombEvent(
+                at_ms=at_ms,
+                round_index=round_index,
+                player_id=player_id,
+                stage=stage,
+            )
+        )
+    return tuple(result)
+
+
+def _parse_stats_phase_timeline(raw_list: object) -> tuple[DakanuStatsPhasePoint, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsPhasePoint] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        at_ms = _opt_int(item, "at_ms")
+        phase = _opt_str(item, "phase")
+        if at_ms is None or phase is None:
+            continue
+        result.append(DakanuStatsPhasePoint(at_ms=at_ms, phase=phase))
+    return tuple(result)
+
+
+def _extract_role_event(
+    raw: object,
+    fallback_player_id: str = "",
+) -> DakanuStatsRoleEvent | None:
+    if isinstance(raw, dict):
+        player_id = _opt_id_str(raw, "player_id") or fallback_player_id
+        at_ms = _opt_int(raw, "at_ms")
+        if not player_id or at_ms is None or "role_id" not in raw:
+            return None
+        order = _opt_int(raw, "record_index")
+        role_id = _opt_int(raw, "role_id")
+        return DakanuStatsRoleEvent(
+            at_ms=at_ms,
+            order=order if order is not None else 10**12,
+            player_id=player_id,
+            role_id=role_id if role_id is not None and role_id > 0 else None,
+        )
+    # view=web 紧凑数组格式：[at_ms, round, record_index, player_id, role_id, ...]
+    if isinstance(raw, list) and len(raw) >= 5:
+        at_ms = _as_int(raw[0])
+        order = _as_int(raw[2])
+        raw_pid = raw[3]
+        player_id = (
+            raw_pid.strip()
+            if isinstance(raw_pid, str) and raw_pid.strip()
+            else (str(raw_pid) if isinstance(raw_pid, int) and not isinstance(raw_pid, bool) else fallback_player_id)
+        )
+        if not player_id or at_ms is None:
+            return None
+        role_id = _as_int(raw[4])
+        return DakanuStatsRoleEvent(
+            at_ms=at_ms,
+            order=order if order is not None else 10**12,
+            player_id=player_id,
+            role_id=role_id if role_id is not None and role_id > 0 else None,
+        )
+    return None
+
+
+def _parse_stats_role_timeline(observations: dict[object, object]) -> tuple[DakanuStatsRoleEvent, ...]:
+    result: list[DakanuStatsRoleEvent] = []
+    has_primary: set[str] = set()
+    if "role_timeline" in observations and isinstance(observations["role_timeline"], list):
+        for item in observations["role_timeline"]:
+            event = _extract_role_event(item)
+            if event is not None:
+                result.append(event)
+                has_primary.add(event.player_id)
+
+    for key in ("growth_level_timeline", "loadout_timeline"):
+        if key in observations and isinstance(observations[key], list):
+            for item in observations[key]:
+                event = _extract_role_event(item)
+                if event is not None and event.player_id not in has_primary:
+                    result.append(event)
+
+    if "growth_routes" in observations and isinstance(observations["growth_routes"], dict):
+        growth_routes = observations["growth_routes"]
+        if "players" in growth_routes and isinstance(growth_routes["players"], list):
+            for player_entry in growth_routes["players"]:
+                if not isinstance(player_entry, dict):
+                    continue
+                pid = _opt_id_str(player_entry, "player_id")
+                if pid is None or pid in has_primary:
+                    continue
+                for ev_key in ("events", "temporary_events"):
+                    if ev_key in player_entry and isinstance(player_entry[ev_key], list):
+                        for raw_ev in player_entry[ev_key]:
+                            event = _extract_role_event(raw_ev, pid)
+                            if event is not None:
+                                result.append(event)
+
+    result.sort(key=lambda item: (item.at_ms, item.order))
+    return tuple(result)
+
+
+def _parse_stats_accuracy_list(raw_list: object) -> tuple[DakanuStatsAccuracy, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsAccuracy] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        player_id = _opt_id_str(item, "player_id")
+        if player_id is None:
+            continue
+        result.append(
+            DakanuStatsAccuracy(
+                player_id=player_id,
+                projectile_accuracy=_opt_float(item, "observed_projectile_accuracy"),
+                headshot_rate=_opt_float(item, "observed_headshot_rate"),
+            )
+        )
+    return tuple(result)
+
+
+def _parse_stats_round_accuracy(raw_list: object) -> tuple[DakanuStatsRoundAccuracy, ...]:
+    if not isinstance(raw_list, list):
+        return ()
+    result: list[DakanuStatsRoundAccuracy] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        index = _opt_int(item, "index")
+        if index is None:
+            continue
+        players = _parse_stats_accuracy_list(item["players"]) if "players" in item else ()
+        result.append(DakanuStatsRoundAccuracy(index=index, players=players))
+    return tuple(result)
+
+
+def _parse_match_statistics(payload: object) -> DakanuMatchStatistics | None:
+    if not isinstance(payload, dict):
+        return None
+    if "ok" not in payload or payload["ok"] is not True:
+        return None
+    room_id = _opt_id_str(payload, "room_id")
+    if room_id is None:
+        return None
+    duration_ms = _opt_int(payload, "duration_ms")
+    if duration_ms is None:
+        duration_ms = _opt_int(payload, "replay_length_ms")
+    teams = _parse_stats_teams(payload["teams"]) if "teams" in payload else ()
+    players = _parse_stats_players(payload["players"]) if "players" in payload else ()
+    rounds = _parse_stats_rounds(payload["rounds"]) if "rounds" in payload else ()
+    events = _parse_stats_events(payload["events"]) if "events" in payload else ()
+
+    round_results: tuple[DakanuStatsRoundResult, ...] = ()
+    bomb_events: tuple[DakanuStatsBombEvent, ...] = ()
+    phase_timeline: tuple[DakanuStatsPhasePoint, ...] = ()
+    role_timeline: tuple[DakanuStatsRoleEvent, ...] = ()
+    overall_accuracy: tuple[DakanuStatsAccuracy, ...] = ()
+    round_accuracy: tuple[DakanuStatsRoundAccuracy, ...] = ()
+
+    if "observations" in payload and isinstance(payload["observations"], dict):
+        observations = payload["observations"]
+        if "round_results" in observations:
+            round_results = _parse_stats_round_results(observations["round_results"])
+        if "bomb_events" in observations:
+            bomb_events = _parse_stats_bomb_events(observations["bomb_events"])
+        role_timeline = _parse_stats_role_timeline(observations)
+        if "attacks" in observations and isinstance(observations["attacks"], dict):
+            attacks = observations["attacks"]
+            if "combat_only" in attacks and isinstance(attacks["combat_only"], dict):
+                combat_only = attacks["combat_only"]
+                if "phase_timeline" in combat_only:
+                    phase_timeline = _parse_stats_phase_timeline(combat_only["phase_timeline"])
+                if "players" in combat_only:
+                    overall_accuracy = _parse_stats_accuracy_list(combat_only["players"])
+                if "rounds" in combat_only:
+                    round_accuracy = _parse_stats_round_accuracy(combat_only["rounds"])
+            if not overall_accuracy and "players" in attacks:
+                overall_accuracy = _parse_stats_accuracy_list(attacks["players"])
+
+    return DakanuMatchStatistics(
+        room_id=room_id,
+        duration_ms=duration_ms if duration_ms is not None else 0,
+        teams=teams,
+        players=players,
+        rounds=rounds,
+        round_results=round_results,
+        events=events,
+        bomb_events=bomb_events,
+        phase_timeline=phase_timeline,
+        role_timeline=role_timeline,
+        overall_accuracy=overall_accuracy,
+        round_accuracy=round_accuracy,
+    )
+
+
+@to_thread
+def _fetch_match_statistics_sync(room_id: str, region: str) -> DakanuMatchStatistics:
+    url = f"{BASE_URL}/api/match/{room_id}/statistics"
+    try:
+        with httpx.Client(timeout=90.0, follow_redirects=True) as client:
+            response = client.get(
+                url,
+                params={"region": region, "view": "web"},
+                headers={"X-Karabi-Region": region},
+            )
+    except httpx.TimeoutException:
+        logger.warning(f"[卡拉彼丘·对局分析] 获取对局 {room_id} 统计超时")
+        raise DakanuError("对局回放解析超时，请稍后再试。") from None
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·对局分析] 请求对局 {room_id} 统计失败：{exc}")
+        raise DakanuError("获取对局分析数据失败，请稍后再试。") from None
+
+    if response.status_code == 404:
+        raise DakanuError(f"没有找到对局 {room_id} 的回放统计数据。")
+    if response.status_code == 429:
+        raise DakanuError("对局分析请求过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法解析该对局，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·对局分析] 对局 {room_id} 统计返回 HTTP {response.status_code}")
+        err_text = _safe_error_text(response)
+        raise DakanuError(err_text or "获取对局分析数据失败，请稍后再试。")
+
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning(f"[卡拉彼丘·对局分析] 对局 {room_id} 统计返回非 JSON 响应")
+        raise DakanuError("对局分析数据格式异常，请稍后再试。") from None
+
+    if isinstance(payload, dict) and _opt_bool(payload, "ok") is not True:
+        err = _opt_str(payload, "error")
+        if err is not None and err.strip() and "<" not in err:
+            raise DakanuError(err.strip())
+        raise DakanuError("战绩站暂未提供该对局的分析数据。")
+
+    parsed = _parse_match_statistics(payload)
+    if parsed is None:
+        logger.warning(f"[卡拉彼丘·对局分析] 对局 {room_id} 统计响应结构异常")
+        raise DakanuError("对局分析数据格式异常，请稍后再试。")
+    return parsed
+
+
+async def fetch_match_statistics(room_id: str, *, region: str = "cn") -> DakanuMatchStatistics:
+    """获取单场对局的回放解析全局统计数据。"""
+    return await _fetch_match_statistics_sync(room_id, region)

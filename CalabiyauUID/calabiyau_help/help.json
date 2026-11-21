@@ -62,6 +62,15 @@
                 "need_admin": false
             },
             {
+                "name": "对局分析",
+                "desc": "分析指定对局 ID 的总览与逐回合战绩数据",
+                "eg": "对局分析12345678",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "刷新数据",
                 "desc": "从战绩站点重新拉取最新玩家缓存",
                 "eg": "刷新数据1234567",
