@@ -230,7 +230,9 @@ class DakanuRefreshError(TypedDict):
 class DakanuRefreshJob(TypedDict, total=False):
     state: str
     startedAt: int
-    finishedAt: int
+    finishedAt: int | None
+    attempt: int
+    nextAttemptAt: int | None
     error: DakanuRefreshError
     warning: dict[str, str]
 
@@ -722,7 +724,7 @@ def _start_refresh_sync(player_id: str) -> DakanuRefreshJob:
         raise DakanuError("查询过于频繁，请稍后再试。")
     if response.status_code in {502, 503, 504}:
         raise DakanuError("战绩站暂时无法查询，请稍后再试。")
-    if response.status_code != 200:
+    if response.status_code not in {200, 202}:
         logger.warning(f"[卡拉彼丘·刷新数据] 启动玩家 {player_id} 刷新返回 HTTP {response.status_code}")
         raise DakanuError("启动数据刷新失败，请稍后再试。")
     try:
@@ -744,7 +746,7 @@ async def start_profile_refresh(player_id: str) -> DakanuRefreshJob:
 def _fetch_refresh_status_sync(player_id: str) -> DakanuRefreshJob:
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         response = client.get(f"{BASE_URL}/api/summoner/{player_id}/refresh")
-    if response.status_code != 200:
+    if response.status_code not in {200, 202}:
         logger.warning(f"[卡拉彼丘·刷新数据] 读取玩家 {player_id} 刷新状态返回 HTTP {response.status_code}")
         raise DakanuError("读取刷新状态失败，请稍后再试。")
     try:
