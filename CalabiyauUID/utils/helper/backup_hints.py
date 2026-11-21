@@ -2,7 +2,7 @@
 
 from gsuid_core.logger import logger
 
-from ..utils.paths import CACHE_DIR, CONFIG_PATH, IMG_CACHE_DIR, PLAYER_DATA_DIR
+from ..utils.paths import CACHE_DIR, CONFIG_PATH, IMG_CACHE_DIR, CUSTOM_BG_PATH, PLAYER_DATA_DIR
 
 _PLUGIN_NAME = "CalabiyauUID"
 
@@ -26,6 +26,13 @@ def register_calabiyau_backup_hints() -> None:
         CONFIG_PATH,
         "config",
         "插件配置",
+        default_selected=True,
+    )
+    register_backup_path(
+        _PLUGIN_NAME,
+        CUSTOM_BG_PATH,
+        "config",
+        "自定义卡片背景图片",
         default_selected=True,
     )
     register_backup_path(

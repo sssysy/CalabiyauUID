@@ -8,23 +8,28 @@
 body {
   width: 100%;
   min-height: 1px;
-  background: #eceff4;
-  color: #172033;
+  background: #1e293b;
+  color: #0f172a;
   font-family: "MiSans", "Microsoft YaHei", sans-serif;
   font-size: 14px;
 }
 .wrap {
   width: 100%;
   padding: 20px;
-  background: #eceff4;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
 }
 .card {
   width: 100%;
-  background: #ffffff;
-  border: 1px solid rgba(22, 26, 33, .09);
+  background: rgba(255, 255, 255, .52);
+  backdrop-filter: blur(18px);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
 }
 .hero {
   display: flex;
@@ -32,8 +37,7 @@ body {
   justify-content: space-between;
   gap: 20px;
   padding: 22px 24px 18px;
-  background: linear-gradient(135deg, #f8fafd 0%, #eef3fa 100%);
-  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  background: transparent;
 }
 .hero-left {
   flex: 1;
@@ -56,7 +60,7 @@ body {
 .clan-level {
   font-size: 16px;
   font-weight: 700;
-  color: #64748b;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .meta-row {
@@ -69,19 +73,19 @@ body {
   flex: none;
   font-size: 13px;
   font-weight: 600;
-  color: #64748b;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .meta-sep {
   flex: none;
-  color: #94a3b8;
+  color: #1e293b;
   font-size: 13px;
 }
 .clan-intro {
   flex: 1;
   min-width: 0;
   font-size: 14px;
-  color: #334155;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -100,7 +104,7 @@ body {
 }
 .metric-label {
   font-size: 12px;
-  color: #64748b;
+  color: #1e293b;
 }
 .metric-val {
   font-size: 16px;
@@ -135,15 +139,14 @@ body {
   gap: 12px;
   padding: 10px 14px;
   border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid rgba(22, 26, 33, .08);
+  background: rgba(255, 255, 255, .30);
 }
 .member-rank {
   width: 24px;
   flex: none;
   font-size: 13px;
   font-weight: 700;
-  color: #64748b;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
   text-align: center;
 }
@@ -196,7 +199,6 @@ body {
   padding: 1px 7px;
   border-radius: 4px;
   background: #fff7ed;
-  border: 1px solid rgba(234, 88, 12, .35);
   color: #c2410c;
   font-size: 11px;
   font-weight: 700;
@@ -209,19 +211,20 @@ body {
 }
 .member-sub {
   font-size: 12.5px;
-  color: #64748b;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .empty-roster {
   padding: 36px 20px;
   text-align: center;
   font-size: 14px;
-  color: #64748b;
+  color: #1e293b;
 }
 .footer {
   text-align: center;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(241, 245, 249, .92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .68);
   padding: 14px 10px 0;
 }
 </style>

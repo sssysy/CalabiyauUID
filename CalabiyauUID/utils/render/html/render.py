@@ -1,11 +1,14 @@
 """HTML 卡片模板加载与统一 pytakumi 渲染入口。"""
 
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import replace, dataclass
 
 import jinja2
 
+from gsuid_core.pool import to_thread
 from gsuid_core.utils.html_render import render_html_to_bytes
+
+from ...helper.assets import load_card_bg_data_uri
 
 CARD_WIDTH = 1000
 CARD_DPI = 192
@@ -26,12 +29,14 @@ class CardTemplateContext:
     """HTML 卡片模板上下文基类。"""
 
     footer_text: str = CARD_FOOTER_TEXT
+    bg_uri: str = ""
 
 
 def render_template(template_name: str, context: CardTemplateContext) -> str:
     """加载指定单 HTML 模板并渲染为完整文档字符串。"""
+    resolved_context = context if context.bg_uri else replace(context, bg_uri=load_card_bg_data_uri())
     template = _ENV.get_template(template_name)
-    return template.render(data=context)
+    return template.render(data=resolved_context)
 
 
 async def render_html(
@@ -61,7 +66,11 @@ async def render_card(
     default_font_size: float = 14.0,
 ) -> bytes:
     """渲染单 HTML 模板并输出 PNG 图片字节。"""
-    html_content = render_template(template_name, context)
+    resolved_context = context
+    if not resolved_context.bg_uri:
+        bg_uri = await to_thread(load_card_bg_data_uri)()
+        resolved_context = replace(resolved_context, bg_uri=bg_uri)
+    html_content = render_template(template_name, resolved_context)
     return await render_html(
         html_content,
         width=width,

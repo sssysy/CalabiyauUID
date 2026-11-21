@@ -10,7 +10,7 @@ from gsuid_core.pool import to_thread
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import (
     image_data_uri,
-    local_banner_bg_image,
+    local_card_bg_image,
 )
 from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.api.biligame_wiki import (
@@ -96,7 +96,7 @@ async def build_event_timeline_card(*, use_cache: bool = True) -> bytes:
         emit_ai_text(summary)
         await sync_reminders_from_activities(activities, now, allow_catchup_send=False)
         semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
-        banner_path = local_banner_bg_image()
+        banner_path = local_card_bg_image()
         banner_bg_uri, image_uris = await asyncio.gather(
             _resolve_image_uri("", banner_path, semaphore),
             _load_activity_images(activities, semaphore),

@@ -3,7 +3,8 @@
 import base64
 from pathlib import Path
 
-from ..utils.paths import DATA_DIR, ASSET_DIR
+from ..utils.paths import DATA_DIR, ASSET_DIR, CUSTOM_BG_PATH
+from ...calabiyau_config import CalabiyauConfig
 
 _IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg", ".gif")
 _BUNDLED_BANNER_BG = Path(__file__).resolve().parents[2] / "calabiyau_help" / "texture2d" / "banner_bg.jpg"
@@ -118,6 +119,34 @@ def local_banner_bg_image() -> Path | None:
     if found is not None:
         return found
     return _existing_image(_BUNDLED_BANNER_BG)
+
+
+def local_card_bg_image() -> Path | None:
+    """优先读取自定义背景 bg.png，未设置时回退赛季高斯模糊背景 bg_blur.jpg。"""
+    cfg_raw = CalabiyauConfig.get_config("CustomBgPath").data
+    if isinstance(cfg_raw, str) and cfg_raw.strip():
+        configured = _existing_image(Path(cfg_raw.strip()))
+        if configured is not None:
+            return configured
+    custom = _existing_image(CUSTOM_BG_PATH)
+    if custom is not None:
+        return custom
+    blur_path = DATA_DIR / "help" / "texture2d" / "bg_blur.jpg"
+    found_blur = _existing_image(blur_path)
+    if found_blur is not None:
+        return found_blur
+    from ...calabiyau_help.help_services import ensure_help_textures
+
+    ensure_help_textures()
+    return _existing_image(blur_path)
+
+
+def load_card_bg_data_uri() -> str:
+    """读取当前生效的卡片背景图并编码为 data URI。"""
+    path = local_card_bg_image()
+    if path is None:
+        return ""
+    return image_data_uri(path.read_bytes(), path.suffix)
 
 
 def image_data_uri(content: bytes, suffix: str) -> str:

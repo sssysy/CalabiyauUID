@@ -8,41 +8,57 @@
 body {
   width: 100%;
   min-height: 1px;
-  background: #eceff4;
-  color: #172033;
+  background: #1e293b;
+  color: #0f172a;
   font-family: "MiSans", "Microsoft YaHei", sans-serif;
   font-size: 15px;
 }
+.wrap {
+  width: 100%;
+  padding: 20px;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
+}
 .empty-card {
   width: 100%;
-  padding: 42px 32px 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e8edf4 100%);
+  padding: 36px 28px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .52);
+  backdrop-filter: blur(18px);
   text-align: center;
 }
 .empty-title {
   font-size: 22px;
   font-weight: 700;
-  color: #263247;
+  color: #0f172a;
 }
 .empty-text {
   margin-top: 12px;
   font-size: 15px;
   line-height: 1.6;
-  color: #7c8799;
+  color: #1e293b;
   white-space: pre-wrap;
 }
 .footer {
-  margin-top: 24px;
+  margin-top: 14px;
   text-align: center;
-  color: #929cac;
+  color: rgba(241, 245, 249, .92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .68);
   font-size: 11px;
 }
 </style>
 </head>
 <body>
-<div class="empty-card">
-  <div class="empty-title">还没有战绩数据</div>
-  <div class="empty-text">{{ data.message }}</div>
+<div class="wrap">
+  <div class="empty-card">
+    <div class="empty-title">还没有战绩数据</div>
+    <div class="empty-text">{{ data.message }}</div>
+  </div>
   <div class="footer">{{ data.footer_text }}</div>
 </div>
 </body>

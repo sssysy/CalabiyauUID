@@ -8,23 +8,28 @@
 body {
   width: 100%;
   min-height: 1px;
-  background: #eceff4;
-  color: #172033;
+  background: #1e293b;
+  color: #0f172a;
   font-family: "MiSans", "Microsoft YaHei", sans-serif;
   font-size: 14px;
 }
 .wrap {
   width: 100%;
   padding: 20px;
-  background: #eceff4;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
 }
 .card {
   width: 100%;
-  background: #ffffff;
-  border: 1px solid rgba(22, 26, 33, .09);
+  background: rgba(255, 255, 255, .52);
+  backdrop-filter: blur(18px);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
 }
 .hero {
   display: flex;
@@ -32,8 +37,7 @@ body {
   justify-content: space-between;
   gap: 16px;
   padding: 18px 22px;
-  background: #fafbfd;
-  border-bottom: 1px solid rgba(22, 26, 33, .08);
+  background: transparent;
 }
 .card-title {
   font-size: 22px;
@@ -48,8 +52,8 @@ body {
   flex: none;
   padding: 6px 12px;
   border-radius: 6px;
-  background: #f3f5f8;
-  color: #475569;
+  background: rgba(255, 255, 255, .36);
+  color: #1e293b;
   font-size: 13px;
   font-weight: 600;
   font-family: "Mono", Consolas, monospace;
@@ -76,16 +80,14 @@ body {
   gap: 9px;
   padding: 10px 11px;
   border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid rgba(22, 26, 33, .08);
+  background: rgba(255, 255, 255, .30);
 }
 .banned-item.is-single {
   padding: 16px 18px;
   gap: 12px;
 }
 .banned-item.is-masked {
-  background: #f4f6f9;
-  border-color: rgba(22, 26, 33, .06);
+  background: rgba(255, 255, 255, .24);
 }
 .banned-item.is-spacer {
   visibility: hidden;
@@ -95,7 +97,7 @@ body {
   width: 24px;
   font-size: 11.5px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
   text-align: center;
 }
@@ -143,7 +145,7 @@ body {
   color: #475569;
 }
 .level-pill {
-  color: #64748b;
+  color: #1e293b;
   font-size: 10.5px;
   font-weight: 600;
   line-height: 14px;
@@ -195,7 +197,7 @@ body {
   font-size: 16px;
 }
 .item-name.is-masked {
-  color: #475569;
+  color: #1e293b;
   font-weight: 600;
 }
 .ban-tag {
@@ -215,31 +217,32 @@ body {
   font-size: 11.5px;
 }
 .item-uid {
-  color: #64748b;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .item-date {
   font-size: 11px;
-  color: #94a3b8;
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .empty-state {
   padding: 36px 20px;
   text-align: center;
   font-size: 14px;
-  color: #64748b;
+  color: #1e293b;
 }
 .pagination-bar {
   text-align: center;
   font-size: 12px;
   font-weight: 400;
-  color: #64748b;
+  color: #1e293b;
   padding-top: 14px;
 }
 .footer {
   text-align: center;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(241, 245, 249, .92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .68);
   padding: 14px 10px 0;
 }
 </style>

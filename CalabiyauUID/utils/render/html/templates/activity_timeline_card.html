@@ -21,13 +21,12 @@ body {
 }
 .bg-img {
   position: absolute;
-  left: -24px;
-  top: -24px;
-  width: calc(100% + 48px);
-  height: calc(100% + 48px);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   object-position: center;
-  filter: blur(14px);
   opacity: 0.78;
 }
 .bg-overlay {
@@ -134,12 +133,7 @@ body {
   height: 68px;
   border-radius: 0;
   overflow: hidden;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
   background: #121928;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
-}
-.bar-wrap.is-urgent {
-  border-color: rgba(251, 191, 36, 0.88);
 }
 .bar-bg {
   position: absolute;
@@ -222,8 +216,8 @@ body {
 </head>
 <body>
 <div class="canvas">
-  {% if data.banner_bg_uri %}
-  <img class="bg-img" src="{{ data.banner_bg_uri }}" alt="" />
+  {% if data.bg_uri or data.banner_bg_uri %}
+  <img class="bg-img" src="{{ data.bg_uri or data.banner_bg_uri }}" alt="" />
   {% endif %}
   <div class="bg-overlay"></div>
   <div class="inner">

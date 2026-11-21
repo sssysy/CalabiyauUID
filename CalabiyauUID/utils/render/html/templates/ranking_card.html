@@ -8,36 +8,40 @@
 body {
   width: 100%;
   min-height: 1px;
-  background: #eceff4;
-  color: #172033;
+  background: #1e293b;
+  color: #0f172a;
   font-family: "MiSans", "Microsoft YaHei", sans-serif;
   font-size: 14px;
 }
 .wrap {
   width: 100%;
   padding: 20px;
-  background: #eceff4;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
 }
 .card {
   width: 100%;
-  background: #fff;
-  border: 1px solid rgba(22, 26, 33, .09);
+  background: rgba(255, 255, 255, .52);
+  backdrop-filter: blur(18px);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(22, 26, 33, .06);
 }
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(22, 26, 33, .08);
-  background: #fff;
+  background: transparent;
 }
 .card-title {
   font-size: 20px;
   font-weight: 700;
-  color: rgba(0, 0, 0, .88);
+  color: #0f172a;
 }
 .head-actions {
   display: flex;
@@ -50,15 +54,14 @@ body {
   gap: 7px;
   padding: 6px 12px;
   border-radius: 8px;
-  background: #f3f5f8;
-  border: 1px solid rgba(22, 26, 33, .08);
+  background: rgba(255, 255, 255, .36);
   font-size: 12px;
-  color: rgba(0, 0, 0, .55);
+  color: #1e293b;
 }
 .head-pill strong {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(0, 0, 0, .88);
+  color: #0f172a;
   font-family: "Mono", Consolas, monospace;
 }
 .head-pill .season-val {
@@ -76,7 +79,7 @@ body {
   color: #e2453c;
 }
 .pill-delta--flat {
-  color: rgba(0, 0, 0, .42);
+  color: #1e293b;
 }
 .podium {
   display: flex;
@@ -84,8 +87,7 @@ body {
   justify-content: center;
   gap: 16px;
   padding: 24px 24px 20px;
-  border-bottom: 1px solid rgba(22, 26, 33, .08);
-  background: linear-gradient(180deg, #fafbfd 0%, #fff 100%);
+  background: transparent;
 }
 .podium-card {
   position: relative;
@@ -96,15 +98,12 @@ body {
   align-items: center;
   padding: 20px 14px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(22, 26, 33, .10);
-  background: #f7f8fa;
+  background: rgba(255, 255, 255, .32);
   text-align: center;
 }
 .podium-card.is-first {
   padding: 24px 16px 18px;
-  border-color: rgba(212, 160, 36, .45);
-  background: linear-gradient(180deg, #fffaf0 0%, #fffdf8 100%);
-  box-shadow: 0 6px 18px rgba(212, 160, 36, .10);
+  background: rgba(255, 250, 240, .45);
 }
 .podium-badge {
   display: flex;
@@ -170,7 +169,7 @@ body {
   margin-top: 10px;
   font-size: 15px;
   font-weight: 700;
-  color: rgba(0, 0, 0, .88);
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -196,7 +195,7 @@ body {
   width: 100%;
   margin-top: 4px;
   font-size: 11.5px;
-  color: rgba(0, 0, 0, .48);
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,7 +220,7 @@ body {
 .podium-score-label {
   margin-top: 2px;
   font-size: 11px;
-  color: rgba(0, 0, 0, .44);
+  color: #1e293b;
 }
 .podium-roles {
   display: flex;
@@ -258,12 +257,11 @@ body {
   width: 100%;
   padding: 8px 16px;
   gap: 10px;
-  border-bottom: 1px solid rgba(22, 26, 33, .09);
   font-size: 13px;
 }
 .tr.head {
-  background: #eef0f3;
-  color: rgba(0, 0, 0, .48);
+  background: rgba(255, 255, 255, .26);
+  color: #1e293b;
   font-size: 11.5px;
   font-weight: 600;
   padding: 9px 16px;
@@ -279,7 +277,7 @@ body {
   flex: none;
   text-align: right;
   font-weight: 700;
-  color: rgba(0, 0, 0, .62);
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .col-player {
@@ -320,21 +318,21 @@ body {
 .player-nick {
   font-size: 13.5px;
   font-weight: 650;
-  color: rgba(0, 0, 0, .86);
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .player-uid {
   font-size: 11px;
-  color: rgba(0, 0, 0, .42);
+  color: #1e293b;
   font-family: "Mono", Consolas, monospace;
 }
 .col-region {
   width: 98px;
   flex: none;
   font-size: 12px;
-  color: rgba(0, 0, 0, .60);
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -359,7 +357,7 @@ body {
   flex: none;
   text-align: right;
   font-weight: 700;
-  color: rgba(0, 0, 0, .86);
+  color: #0f172a;
   font-family: "Mono", Consolas, monospace;
   white-space: nowrap;
 }
@@ -382,7 +380,7 @@ body {
   color: #e2453c;
 }
 .delta--flat {
-  color: rgba(0, 0, 0, .38);
+  color: #1e293b;
   font-weight: 500;
 }
 .col-roles {
@@ -412,7 +410,7 @@ body {
 .record-wins-only {
   font-size: 12.5px;
   font-weight: 650;
-  color: rgba(0, 0, 0, .72);
+  color: #0f172a;
   font-family: "Mono", Consolas, monospace;
   white-space: nowrap;
 }
@@ -423,7 +421,7 @@ body {
   display: flex;
   border-radius: 4px;
   overflow: hidden;
-  background: #eef0f3;
+  background: rgba(255, 255, 255, .36);
 }
 .record-win {
   background: #4b8ef0;
@@ -453,27 +451,28 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  color: rgba(0, 0, 0, .42);
+  color: #1e293b;
 }
 .record-rate {
   width: 42px;
   flex: none;
   text-align: right;
   font-weight: 650;
-  color: rgba(0, 0, 0, .78);
+  color: #0f172a;
   font-family: "Mono", Consolas, monospace;
 }
 .empty-board {
   padding: 48px 20px;
   text-align: center;
-  color: rgba(0, 0, 0, .48);
+  color: #1e293b;
   font-size: 14px;
 }
 .footer {
   text-align: center;
   padding-top: 12px;
   font-size: 11px;
-  color: rgba(0, 0, 0, .42);
+  color: rgba(241, 245, 249, .92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .68);
 }
 </style>
 </head>
