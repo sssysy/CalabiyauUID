@@ -16,8 +16,8 @@ from ..utils.api.dakanu import (
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import image_data_uri, local_avatar_image
+from ..utils.helper.refresh import ensure_player_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text
-from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import is_numeric_uid
 from ..utils.render.html.renderer.clan_card import render_clan_card
@@ -97,13 +97,10 @@ async def resolve_clan_target(ev: Event) -> tuple[DakanuClan | None, str | None]
             return None, "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定，或发送 kq战队 <战队名或 ID> 查询。"
         return None, "对方尚未绑定卡拉彼丘账号。"
 
-    snapshot = await load_player_snapshot(player_id)
-    if snapshot is None:
-        return (
-            None,
-            f"本地还没有该玩家的战绩缓存（UID：{player_id}）。\n"
-            f"请先发送 kq刷新数据 {player_id} 拉取后再查看，或发送 kq战队 <战队名或 ID> 查询。",
-        )
+    try:
+        snapshot = await ensure_player_snapshot(player_id)
+    except DakanuError as exc:
+        return None, str(exc)
 
     clan_id = snapshot.profile["player"]["clanId"].strip()
     if not clan_id:

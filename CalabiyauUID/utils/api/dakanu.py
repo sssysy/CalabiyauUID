@@ -11,8 +11,8 @@ from gsuid_core.pool import to_thread
 from gsuid_core.logger import logger
 
 BASE_URL = "https://www.dakanu.com"
-_REFRESH_POLL_INTERVAL = 2.0
-_REFRESH_TIMEOUT = 300.0
+_REFRESH_POLL_INTERVAL = 1.5
+_REFRESH_TIMEOUT = 90.0
 _ROOM_ID_RE = re.compile(r"^[1-9]\d{0,19}$")
 
 
@@ -746,6 +746,12 @@ async def start_profile_refresh(player_id: str) -> DakanuRefreshJob:
 def _fetch_refresh_status_sync(player_id: str) -> DakanuRefreshJob:
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         response = client.get(f"{BASE_URL}/api/summoner/{player_id}/refresh")
+    if response.status_code == 404:
+        raise DakanuError("刷新任务不存在或已过期。")
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法查询，请稍后再试。")
     if response.status_code not in {200, 202}:
         logger.warning(f"[卡拉彼丘·刷新数据] 读取玩家 {player_id} 刷新状态返回 HTTP {response.status_code}")
         raise DakanuError("读取刷新状态失败，请稍后再试。")
@@ -766,16 +772,33 @@ async def fetch_refresh_status(player_id: str) -> DakanuRefreshJob:
 
 async def refresh_profile(player_id: str) -> DakanuProfile:
     """启动刷新并等待缓存可读；缓存仍未生成时抛出 DakanuError。"""
-    job = await start_profile_refresh(player_id)
+    restarted = False
+    try:
+        job = await start_profile_refresh(player_id)
+    except DakanuError as start_exc:
+        try:
+            job = await fetch_refresh_status(player_id)
+        except DakanuError:
+            raise start_exc from None
+
     deadline = asyncio.get_running_loop().time() + _REFRESH_TIMEOUT
-    while job["state"] == "running":
+    while "state" in job and job["state"] == "running":
         if asyncio.get_running_loop().time() >= deadline:
             raise DakanuError("刷新仍在进行，请稍后用 kq战绩总览 查看。")
         await asyncio.sleep(_REFRESH_POLL_INTERVAL)
-        job = await fetch_refresh_status(player_id)
-    if job["state"] == "failed":
-        error = job["error"]
-        message = error["message"].strip()
+        try:
+            job = await fetch_refresh_status(player_id)
+        except DakanuError as poll_exc:
+            if restarted or str(poll_exc) != "刷新任务不存在或已过期。":
+                raise
+            restarted = True
+            job = await start_profile_refresh(player_id)
+    if "state" in job and job["state"] == "failed":
+        message = ""
+        if "error" in job and isinstance(job["error"], dict) and "message" in job["error"]:
+            raw_msg = job["error"]["message"]
+            if isinstance(raw_msg, str):
+                message = raw_msg.strip()
         raise DakanuError(message or "战绩刷新失败，请稍后再试。")
 
     for _ in range(5):

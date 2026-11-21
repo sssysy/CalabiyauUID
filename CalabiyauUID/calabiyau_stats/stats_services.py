@@ -15,9 +15,9 @@ from ..utils.helper.assets import (
     local_frame_index_image,
     local_challenge_tier_image,
 )
-from ..utils.helper.refresh import refresh_player_data
+from ..utils.helper.refresh import ensure_player_snapshot as _ensure_fresh_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text, format_player_snapshot_summary
-from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
+from ..utils.helper.player_data import PlayerSnapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
 from ..utils.render.html.renderer.summary_card import (
@@ -52,7 +52,7 @@ async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
 
 
 async def ensure_player_snapshot(player_id: str, *, refresh: bool = False) -> PlayerSnapshot:
-    return (await refresh_player_data(player_id, force=refresh)).snapshot
+    return await _ensure_fresh_snapshot(player_id, force=refresh)
 
 
 def format_snapshot_ai_summary(snapshot: PlayerSnapshot) -> str:
@@ -139,12 +139,8 @@ async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
 
 
 async def build_summary_card(player_id: str) -> bytes:
-    """只读本地快照渲染；没有快照时提示先刷新。"""
-    snapshot = await load_player_snapshot(player_id)
-    if snapshot is None:
-        raise DakanuError(
-            f"本地还没有该玩家的战绩缓存（UID：{player_id}）。\n请先发送 kq刷新数据 {player_id} 拉取后再查看。"
-        )
+    """读取本地快照渲染；无快照或超过 1 天时静默拉取最新快照。"""
+    snapshot = await ensure_player_snapshot(player_id)
     return await render_snapshot_card(snapshot)
 
 

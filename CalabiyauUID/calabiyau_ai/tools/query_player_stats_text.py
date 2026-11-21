@@ -7,8 +7,8 @@ from gsuid_core.ai_core.register import ai_tools
 
 from ...utils.api.dakanu import DakanuError
 from ...utils.helper.maps import resolve_map, resolve_role_name
+from ...utils.helper.refresh import ensure_player_snapshot
 from ...utils.helper.ai_bridge import format_player_snapshot_summary
-from ...utils.helper.player_data import load_player_snapshot
 from ...utils.database.model_bind import get_main_uid
 from ...utils.helper.player_resolve import resolve_player_input
 from ...utils.render.html.renderer.summary_card import (
@@ -33,7 +33,7 @@ _RECENT_TEXT_LIMIT = 10
 async def calabiyau_query_player_text(ev: Event, query: str = "") -> str:
     """
     以纯文本读取卡拉彼丘玩家的本地快照战绩与最近对局列表（不渲染图片）。
-    适合需要快速获取数值做复盘、对比段位/胜率或提取对局 roomId 时调用；仅读取本地快照，不会自动刷新接口。
+    适合需要快速获取数值做复盘、对比段位/胜率或提取对局 roomId 时调用；本地无快照或已超过 1 天时会自动拉取最新快照。
 
     Args:
         query: 目标玩家纯数字 UID 或游戏昵称；留空则自动读取当前用户绑定的主账号（如消息@了他人则读取被@者）
@@ -55,11 +55,10 @@ async def calabiyau_query_player_text(ev: Event, query: str = "") -> str:
             return "对方尚未绑定卡拉彼丘账号。请提供 UID 或游戏昵称。"
         player_id = bound_uid
 
-    snapshot = await load_player_snapshot(player_id)
-    if snapshot is None:
-        return (
-            f"本地还没有 UID {player_id} 的战绩缓存。请先征询用户后调用刷新工具（kq刷新数据 {player_id}）拉取最新战绩。"
-        )
+    try:
+        snapshot = await ensure_player_snapshot(player_id)
+    except DakanuError as exc:
+        return f"获取 UID {player_id} 的战绩快照失败：{exc}"
 
     challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])
     challenge_label, _, _ = challenge_tier_display(challenge_tier)

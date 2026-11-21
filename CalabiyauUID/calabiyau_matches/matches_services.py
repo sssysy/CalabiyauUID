@@ -11,8 +11,9 @@ from ..utils.api.dakanu import DakanuError, role_image_url
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import MapInfo, resolve_map, resolve_role_name
 from ..utils.helper.assets import image_data_uri, local_role_image, local_avatar_image, local_map_slug_image
+from ..utils.helper.refresh import ensure_player_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text
-from ..utils.helper.player_data import PlayerSnapshot, load_player_snapshot
+from ..utils.helper.player_data import PlayerSnapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.recent_matches import MatchView, load_recent_match_views
 from ..utils.render.html.renderer.matches_card import MatchCardAssets, render_matches_card
@@ -29,9 +30,7 @@ async def resolve_match_player_id(ev: Event) -> tuple[str, str | None]:
 
 
 async def _load_recent_matches_data(player_id: str) -> tuple[PlayerSnapshot, list[MatchView]]:
-    snapshot = await load_player_snapshot(player_id)
-    if snapshot is None:
-        raise DakanuError("本地还没有这个玩家的战绩。\n发送 kq刷新数据 拉取后再查看。")
+    snapshot = await ensure_player_snapshot(player_id)
     matches = snapshot.profile["matches"]
     if not matches:
         raise DakanuError("历史战绩为空。\n发送 kq刷新数据 更新后再查看。")

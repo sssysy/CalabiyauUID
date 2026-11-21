@@ -6,8 +6,10 @@ from dataclasses import dataclass
 
 import httpx
 
-from ..api.dakanu import DakanuProfile, fetch_clan, fetch_leisure, refresh_profile
+from ..api.dakanu import DakanuError, DakanuProfile, fetch_clan, fetch_leisure, refresh_profile
 from .player_data import PlayerSnapshot, has_player_data, load_player_snapshot, save_player_snapshot
+
+_SNAPSHOT_TTL_SECONDS = 86400
 
 
 @dataclass(frozen=True)
@@ -15,6 +17,11 @@ class RefreshResult:
     player_id: str
     snapshot: PlayerSnapshot
     from_cache: bool
+
+
+def is_snapshot_expired(snapshot: PlayerSnapshot) -> bool:
+    """判断本地快照是否已满或超过 1 天。"""
+    return int(time.time()) - snapshot.saved_at >= _SNAPSHOT_TTL_SECONDS
 
 
 _locks: dict[str, asyncio.Lock] = {}
@@ -37,8 +44,10 @@ def track_background(task: asyncio.Task[object]) -> None:
 
 
 async def _snapshot_from_profile(player_id: str, profile: DakanuProfile) -> PlayerSnapshot:
-    leisure = await fetch_leisure(player_id)
-    clan = await fetch_clan(profile["player"]["clanId"])
+    leisure, clan = await asyncio.gather(
+        fetch_leisure(player_id),
+        fetch_clan(profile["player"]["clanId"]),
+    )
     snapshot = PlayerSnapshot(
         profile=profile,
         leisure=leisure,
@@ -59,7 +68,7 @@ async def _refresh_uncached(player_id: str) -> RefreshResult:
 
 
 async def refresh_player_data(player_id: str, *, force: bool = False) -> RefreshResult:
-    """读取或刷新玩家数据；force=False 时优先使用本地快照。"""
+    """读取或刷新玩家数据；force=False 时优先使用 1 天内的本地快照。"""
     inflight = _inflight.get(player_id)
     if inflight is not None:
         return await asyncio.shield(inflight)
@@ -71,7 +80,7 @@ async def refresh_player_data(player_id: str, *, force: bool = False) -> Refresh
             return await asyncio.shield(inflight)
         if not force:
             snapshot = await load_player_snapshot(player_id)
-            if snapshot is not None and has_player_data(player_id):
+            if snapshot is not None and has_player_data(player_id) and not is_snapshot_expired(snapshot):
                 return RefreshResult(player_id=player_id, snapshot=snapshot, from_cache=True)
 
         task = asyncio.create_task(_refresh_uncached(player_id))
@@ -81,3 +90,12 @@ async def refresh_player_data(player_id: str, *, force: bool = False) -> Refresh
         finally:
             if _inflight.get(player_id) is task:
                 _inflight.pop(player_id, None)
+
+
+async def ensure_player_snapshot(player_id: str, *, force: bool = False) -> PlayerSnapshot:
+    """获取 1 天内有效的玩家快照；本地无快照或已超期时静默拉取。"""
+    try:
+        result = await refresh_player_data(player_id, force=force)
+    except RuntimeError as exc:
+        raise DakanuError(str(exc)) from exc
+    return result.snapshot

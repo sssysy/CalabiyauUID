@@ -7,7 +7,6 @@ from gsuid_core.models import Event
 
 from .stats_services import resolve_player_id, build_summary_card
 from ..utils.api.dakanu import DakanuError
-from ..utils.helper.player_data import load_player_snapshot
 
 sv_stats = SV("卡拉彼丘战绩查询")
 
@@ -18,7 +17,7 @@ sv_stats = SV("卡拉彼丘战绩查询")
     to_ai="""查询卡拉彼丘玩家的生涯战绩总览卡片与数据摘要
 
     当用户想看自己或指定玩家的卡拉彼丘战绩总览、段位、胜率、KD、常用超弦体或生成战绩卡片时调用。
-    仅读取本地快照；若提示没有缓存，需先征询或调用刷新/绑定工具。
+    优先读取本地快照；若本地无快照或已超过 1 天，会自动拉取最新快照。
 
     Args:
         text: 目标玩家 UID 或游戏昵称；留空则查询当前绑定主账号（如消息中@了他人则自动查被@者），例如 "" 或 "1234567"
@@ -30,13 +29,6 @@ async def calabiyau_stats_summary(bot: Bot, ev: Event) -> None:
     player_id, error = await resolve_player_id(ev)
     if error is not None:
         await bot.send(error)
-        return
-
-    snapshot = await load_player_snapshot(player_id)
-    if snapshot is None:
-        await bot.send(
-            f"本地还没有该玩家的战绩缓存（UID：{player_id}）。\n请先发送 kq刷新数据 {player_id} 拉取后再查看。"
-        )
         return
 
     try:
