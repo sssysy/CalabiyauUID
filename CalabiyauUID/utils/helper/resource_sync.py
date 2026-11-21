@@ -26,6 +26,7 @@ from gsuid_core.utils.plugins_update.git_async import (
     git_get_current_commit,
 )
 
+from .maps import reload_maps_data
 from ..utils.paths import RESOURCE_DIR
 
 MIRROR_MANIFEST_URL = "https://klbq.sssysy.top/resource_mirror.json"
@@ -280,9 +281,12 @@ async def update_resources() -> bool:
             return False
 
     if synced_changed:
+        reload_maps_data()
         # 延迟导入以避免插件顶层初始化阶段抢跑加载 calabiyau_ai
+        from ...calabiyau_ai.knowledge.aliases import register_calabiyau_aliases
         from ...calabiyau_ai.knowledge.entities import sync_calabiyau_knowledge
 
+        register_calabiyau_aliases()
         await sync_calabiyau_knowledge()
     return True
 

@@ -82,7 +82,7 @@ async def _load_role_images(role_ids: set[int]) -> dict[int, str]:
 async def _load_map_images(map_infos: list[MapInfo]) -> dict[str, str]:
     unique_maps: dict[str, MapInfo] = {}
     for map_info in map_infos:
-        if map_info.slug not in unique_maps:
+        if map_info.slug and map_info.slug not in unique_maps:
             unique_maps[map_info.slug] = map_info
     slugs = sorted(unique_maps)
     uris = await asyncio.gather(*(_resolve_image_uri(_map_url(slug), local_map_slug_image(slug)) for slug in slugs))

@@ -1,11 +1,20 @@
-"""地图与角色等基础 ID 映射关系。"""
+"""从 resources/maps.json 组装地图与角色基础 ID 映射关系。"""
 
+import json
 import itertools
+from pathlib import Path
 from functools import lru_cache
 from dataclasses import dataclass
 from collections.abc import Mapping, Callable
 
 from pypinyin import Style, pinyin, lazy_pinyin
+
+from gsuid_core.logger import logger
+
+from ..utils.paths import RESOURCE_DIR
+
+MAPS_JSON_PATH: Path = RESOURCE_DIR / "maps.json"
+_LOG_TAG = "[卡拉彼丘·地图角色配置]"
 
 
 @dataclass(frozen=True)
@@ -13,113 +22,6 @@ class MapInfo:
     slug: str
     name: str
     mode: str
-
-
-_MAPS: tuple[MapInfo, ...] = (
-    MapInfo("map-01", "404基地", "爆破模式"),
-    MapInfo("map-02", "88区", "爆破模式"),
-    MapInfo("map-03", "欧拉港口", "爆破模式"),
-    MapInfo("map-04", "风曳镇", "爆破模式"),
-    MapInfo("map-05", "空间实验室", "爆破模式"),
-    MapInfo("map-06", "柯西街区", "爆破模式"),
-    MapInfo("map-07", "科斯迷特", "爆破模式"),
-    MapInfo("map-08", "2号仓库", "团竞模式"),
-    MapInfo("map-09", "鹿鹿潮玩区", "团竞模式"),
-    MapInfo("map-10", "水下发电厂", "团竞模式"),
-    MapInfo("map-11", "码头小镇", "团竞模式"),
-    MapInfo("map-12", "花明弓道馆", "团竞模式"),
-    MapInfo("map-13", "离境区", "推车模式"),
-    MapInfo("map-14", "亚克萨工厂", "推车模式"),
-    MapInfo("map-15", "簌雪东区", "推车模式"),
-    MapInfo("map-16", "洛希街区", "晶源感染"),
-    MapInfo("map-17", "迦纳古城", "晶源感染"),
-    MapInfo("map-18", "极地研究所", "晶源感染"),
-    MapInfo("map-19", "奥卡努斯", "爆破模式"),
-    MapInfo("map-20", "莱布伦城", "爆破模式"),
-)
-
-_MAP_BY_SLUG: dict[str, MapInfo] = {map_info.slug: map_info for map_info in _MAPS}
-_EXPLICIT_MAP_SLUGS: dict[int, str] = {
-    200: "map-01",
-    201: "map-02",
-    202: "map-03",
-    203: "map-05",
-    204: "map-04",
-    205: "map-06",
-    206: "map-07",
-    207: "map-19",
-    208: "map-20",
-    11001: "map-16",
-    11002: "map-17",
-    11003: "map-18",
-    11004: "map-05",
-    11005: "map-03",
-    11006: "map-18",
-}
-_MODE_NAMES: dict[int, str] = {
-    1: "团竞模式",
-    2: "爆破模式",
-    3: "推车模式",
-    4: "晶源感染",
-    5: "晶源感染",
-    9: "晶源感染",
-    30: "团竞模式",
-}
-
-
-def resolve_map(map_id: int) -> MapInfo | None:
-    """按站点规则解析地图；无法识别时返回 None。"""
-    if map_id in _EXPLICIT_MAP_SLUGS:
-        slug = _EXPLICIT_MAP_SLUGS[map_id]
-        if slug in _MAP_BY_SLUG:
-            return _MAP_BY_SLUG[slug]
-        return None
-
-    mode_code = map_id // 100
-    if mode_code not in _MODE_NAMES:
-        return None
-    mode_name = _MODE_NAMES[mode_code]
-    mode_maps = [map_info for map_info in _MAPS if map_info.mode == mode_name]
-    if not mode_maps:
-        return None
-    index = (map_id % 100 - 1) % len(mode_maps)
-    return mode_maps[index]
-
-
-ROLE_NAMES: dict[int, list[str]] = {
-    101: ["米雪儿·李", "猫", "猫猫", "糖猫", "唐猫", "米雪儿"],
-    105: ["奥黛丽·格罗夫", "机枪", "机枪妹", "奥黛丽"],
-    107: ["玛德蕾娜·利里", "小画家", "颜料泡泡", "玛德蕾娜"],
-    108: ["信", "牢信"],
-    109: ["令", "牢令", "问了吗", "问了么"],
-    110: ["白墨", "男喷", "墨老板", "自由意志"],
-    112: ["绯莎", "鲨鱼"],
-    115: ["芙拉薇娅", "蝴蝶"],
-    119: ["艾卡", "女高", "女高中生"],
-    120: ["珐格兰丝", "调香师", "调香", "香水"],
-    121: ["忧雾", "窝窝", "蜗牛", "蜗蜗"],
-    122: ["玛拉", "麻辣"],
-    123: ["蕾欧娜", "土木学姐", "土木学长", "土木"],
-    124: ["心夏", "心夏妈妈", "妈妈"],
-    125: ["千代"],
-    126: ["诺诺"],
-    128: ["拉薇", "辣味"],
-    130: ["汐"],
-    131: ["伊薇特", "小熊", "熊", "菲"],
-    132: ["明", "牢明", "牢大", "老大"],
-    133: ["梅瑞狄斯", "沙猫"],
-    137: ["香奈美", "小美", "歌姬"],
-    146: ["星绘", "小绘", "守护星芒"],
-    205: ["加拉蒂亚·利里", "大画家", "加拉蒂亚"],
-}
-
-
-def resolve_role_name(role_id: int) -> str | None:
-    """按角色 ID 解析基础角色名；未收录时返回 None。"""
-    if role_id in ROLE_NAMES and ROLE_NAMES[role_id]:
-        name = ROLE_NAMES[role_id][0].strip()
-        return name if name else None
-    return None
 
 
 @dataclass(frozen=True)
@@ -133,50 +35,223 @@ class RoleMeta:
     position_name: str
 
 
-ROLE_FACTIONS: dict[int, tuple[str, str, str]] = {
-    1: ("欧泊", "#386CF4", "#2558D9"),
-    2: ("剪刀手", "#FD383F", "#CF2E35"),
-    4: ("乌尔比诺", "#FFB526", "#B87300"),
-}
+_MAPS: list[MapInfo] = []
+_MAP_BY_SLUG: dict[str, MapInfo] = {}
+_EXPLICIT_MAP_SLUGS: dict[int, str] = {}
+_EXPLICIT_MAP_NAMES: dict[int, str] = {}
+_MODE_NAMES: dict[int, str] = {}
 
-ROLE_POSITIONS: dict[int, str] = {
-    1: "守护",
-    2: "决斗",
-    3: "控场",
-    4: "支援",
-    6: "先锋",
-}
+# 保持模块级字典引用不变，重载时原地更新以兼容外部直接 import
+ROLE_NAMES: dict[int, list[str]] = {}
+ROLE_FACTIONS: dict[int, tuple[str, str, str]] = {}
+ROLE_POSITIONS: dict[int, str] = {}
+_ROLE_META_CODES: dict[int, tuple[int, int]] = {}
 
-_ROLE_META_CODES: dict[int, tuple[int, int]] = {
-    101: (1, 1),
-    105: (4, 1),
-    107: (4, 3),
-    108: (1, 1),
-    109: (2, 3),
-    110: (4, 2),
-    112: (4, 2),
-    115: (1, 2),
-    119: (2, 2),
-    120: (2, 4),
-    121: (1, 3),
-    122: (2, 2),
-    123: (1, 1),
-    124: (1, 4),
-    125: (1, 2),
-    126: (2, 6),
-    128: (2, 6),
-    130: (4, 2),
-    131: (1, 3),
-    132: (2, 2),
-    133: (2, 3),
-    137: (2, 6),
-    146: (4, 4),
-    205: (4, 6),
-}
+_loaded_path: Path | None = None
+_loaded_mtime_ns: int | None = None
+
+
+def _parse_int_key(raw_key: str) -> int | None:
+    cleaned = raw_key.strip()
+    if not cleaned.isascii() or not cleaned.isdigit():
+        return None
+    return int(cleaned)
+
+
+def _parse_int_str_map(raw: object) -> dict[int, str]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[int, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        parsed_key = _parse_int_key(key)
+        if parsed_key is not None and value:
+            result[parsed_key] = value
+    return result
+
+
+def _parse_maps_list(raw: object) -> list[MapInfo]:
+    if not isinstance(raw, list):
+        return []
+    result: list[MapInfo] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        if "slug" not in item or "name" not in item or "mode" not in item:
+            continue
+        slug = item["slug"]
+        name = item["name"]
+        mode = item["mode"]
+        if isinstance(slug, str) and isinstance(name, str) and isinstance(mode, str):
+            result.append(MapInfo(slug=slug, name=name, mode=mode))
+    return result
+
+
+def _parse_role_names(raw: object) -> dict[int, list[str]]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[int, list[str]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, list):
+            continue
+        parsed_key = _parse_int_key(key)
+        if parsed_key is None:
+            continue
+        names = [item for item in value if isinstance(item, str) and item.strip()]
+        if names:
+            result[parsed_key] = names
+    return result
+
+
+def _parse_role_factions(raw: object) -> dict[int, tuple[str, str, str]]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[int, tuple[str, str, str]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        parsed_key = _parse_int_key(key)
+        if parsed_key is None:
+            continue
+        if "name" not in value or "dot_color" not in value or "text_color" not in value:
+            continue
+        name = value["name"]
+        dot_color = value["dot_color"]
+        text_color = value["text_color"]
+        if isinstance(name, str) and isinstance(dot_color, str) and isinstance(text_color, str):
+            result[parsed_key] = (name, dot_color, text_color)
+    return result
+
+
+def _parse_role_meta_codes(raw: object) -> dict[int, tuple[int, int]]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[int, tuple[int, int]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        parsed_key = _parse_int_key(key)
+        if parsed_key is None:
+            continue
+        if "faction_code" not in value or "position_code" not in value:
+            continue
+        faction_code = value["faction_code"]
+        position_code = value["position_code"]
+        if (
+            isinstance(faction_code, int)
+            and not isinstance(faction_code, bool)
+            and isinstance(position_code, int)
+            and not isinstance(position_code, bool)
+        ):
+            result[parsed_key] = (faction_code, position_code)
+    return result
+
+
+def reload_maps_data(path: Path | None = None) -> bool:
+    """从 resources/maps.json 重新装载并组装全部地图与角色配置表。"""
+    global _loaded_path, _loaded_mtime_ns
+    target = path if path is not None else MAPS_JSON_PATH
+    if not target.is_file():
+        logger.warning(f"{_LOG_TAG} 配置文件不存在：{target.name}")
+        return False
+    try:
+        stat_result = target.stat()
+        raw_text = target.read_text(encoding="utf-8")
+        payload: object = json.loads(raw_text)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(f"{_LOG_TAG} 读取 {target.name} 失败：{exc}")
+        return False
+
+    if not isinstance(payload, dict):
+        logger.warning(f"{_LOG_TAG} {target.name} 顶层结构不是对象")
+        return False
+
+    maps_list = _parse_maps_list(payload["maps"] if "maps" in payload else None)
+    explicit_slugs = _parse_int_str_map(payload["explicit_map_slugs"] if "explicit_map_slugs" in payload else None)
+    explicit_names = _parse_int_str_map(payload["explicit_map_names"] if "explicit_map_names" in payload else None)
+    mode_names = _parse_int_str_map(payload["mode_names"] if "mode_names" in payload else None)
+    role_names = _parse_role_names(payload["role_names"] if "role_names" in payload else None)
+    role_factions = _parse_role_factions(payload["role_factions"] if "role_factions" in payload else None)
+    role_positions = _parse_int_str_map(payload["role_positions"] if "role_positions" in payload else None)
+    role_meta_codes = _parse_role_meta_codes(payload["role_meta_codes"] if "role_meta_codes" in payload else None)
+
+    _MAPS.clear()
+    _MAPS.extend(maps_list)
+    _MAP_BY_SLUG.clear()
+    _MAP_BY_SLUG.update({map_info.slug: map_info for map_info in maps_list})
+    _EXPLICIT_MAP_SLUGS.clear()
+    _EXPLICIT_MAP_SLUGS.update(explicit_slugs)
+    _EXPLICIT_MAP_NAMES.clear()
+    _EXPLICIT_MAP_NAMES.update(explicit_names)
+    _MODE_NAMES.clear()
+    _MODE_NAMES.update(mode_names)
+    ROLE_NAMES.clear()
+    ROLE_NAMES.update(role_names)
+    ROLE_FACTIONS.clear()
+    ROLE_FACTIONS.update(role_factions)
+    ROLE_POSITIONS.clear()
+    ROLE_POSITIONS.update(role_positions)
+    _ROLE_META_CODES.clear()
+    _ROLE_META_CODES.update(role_meta_codes)
+
+    _loaded_path = target
+    _loaded_mtime_ns = stat_result.st_mtime_ns
+    return True
+
+
+def _ensure_loaded() -> None:
+    target = _loaded_path if _loaded_path is not None else MAPS_JSON_PATH
+    if not target.is_file():
+        return
+    try:
+        current_mtime_ns = target.stat().st_mtime_ns
+    except OSError:
+        return
+    if _loaded_mtime_ns != current_mtime_ns:
+        reload_maps_data(target)
+
+
+def resolve_map(map_id: int) -> MapInfo | None:
+    """按站点规则解析地图；无法识别时返回 None。"""
+    _ensure_loaded()
+    base_map: MapInfo | None = None
+    if map_id in _EXPLICIT_MAP_SLUGS:
+        slug = _EXPLICIT_MAP_SLUGS[map_id]
+        if slug in _MAP_BY_SLUG:
+            base_map = _MAP_BY_SLUG[slug]
+    elif map_id > 0:
+        mode_code = map_id // 100
+        if mode_code in _MODE_NAMES:
+            mode_name = _MODE_NAMES[mode_code]
+            mode_maps = [map_info for map_info in _MAPS if map_info.mode == mode_name]
+            if mode_maps:
+                index = (map_id % 100 - 1) % len(mode_maps)
+                base_map = mode_maps[index]
+
+    if map_id in _EXPLICIT_MAP_NAMES:
+        explicit_name = _EXPLICIT_MAP_NAMES[map_id]
+        if base_map is not None:
+            if base_map.name == explicit_name:
+                return base_map
+            return MapInfo(slug=base_map.slug, name=explicit_name, mode=base_map.mode)
+        return MapInfo(slug="", name=explicit_name, mode="")
+
+    return base_map
+
+
+def resolve_role_name(role_id: int) -> str | None:
+    """按角色 ID 解析基础角色名；未收录时返回 None。"""
+    _ensure_loaded()
+    if role_id in ROLE_NAMES and ROLE_NAMES[role_id]:
+        name = ROLE_NAMES[role_id][0].strip()
+        return name if name else None
+    return None
 
 
 def resolve_role_meta(role_id: int) -> RoleMeta | None:
     """按角色 ID 解析阵营与定位展示信息。"""
+    _ensure_loaded()
     if role_id not in _ROLE_META_CODES:
         return None
     faction_code, position_code = _ROLE_META_CODES[role_id]
@@ -199,6 +274,7 @@ def resolve_role_meta(role_id: int) -> RoleMeta | None:
 
 def get_role_display_names() -> dict[int, str]:
     """提取基础角色 ID 到正式展示名的映射。"""
+    _ensure_loaded()
     display_names: dict[int, str] = {}
     for role_id, names in ROLE_NAMES.items():
         if not names:
@@ -289,6 +365,7 @@ def resolve_role_alias(
     extra_roles: Mapping[int, str] | None = None,
 ) -> int | None:
     """按正式名、别名、拼音或首字母解析角色 ID；冲突时取首个命中。"""
+    _ensure_loaded()
     normalized_query = _normalize_role_token(query)
     if not normalized_query:
         return None
@@ -315,3 +392,6 @@ def resolve_role_alias(
             if matcher(variants):
                 return role_id
     return None
+
+
+reload_maps_data()
