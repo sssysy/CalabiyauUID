@@ -1026,7 +1026,7 @@ body {
         </div>
         <div class="rank-stack">
           <div class="rank-card">
-            <div class="rank-card-head"><span>排位赛 · 当前段位</span><span>本赛季最高 {{ data.season_top_label }}</span></div>
+            <div class="rank-card-head"><span>{% if data.is_season_view %}排位赛 · 赛季段位{% else %}排位赛 · 当前段位{% endif %}</span><span>{% if data.is_season_view %}赛季最高{% else %}本赛季最高{% endif %} {{ data.season_top_label }}</span></div>
             <div class="rank-card-body">
               <div class="rank-card-icon">{% if data.tier_icon %}<img src="{{ data.tier_icon }}" alt="">{% endif %}</div>
               <div>
@@ -1047,6 +1047,7 @@ body {
               <div class="rank-card-right"><b>{{ data.historical_pos }}</b><span>历史排名</span></div>
             </div>
           </div>
+          {% if not data.is_season_view or data.challenge is not none %}
           <div class="rank-card">
             <div class="rank-card-head"><span>挑战赛 · 段位</span><span>{{ data.season }}</span></div>
             {% if data.challenge is not none %}
@@ -1066,6 +1067,7 @@ body {
             <div class="challenge-empty">暂无挑战赛段位数据</div>
             {% endif %}
           </div>
+          {% endif %}
           <div class="baseplate">
             <div class="baseplate-label"><span>基板</span></div>
             <div class="baseplate-stage">
@@ -1081,6 +1083,7 @@ body {
           </div>
         </div>
       </div>
+      {% if not data.is_season_view %}
       <div class="panel">
         <div class="panel-head">
           <span class="panel-title">活跃时段</span>
@@ -1109,6 +1112,7 @@ body {
         <div class="empty">暂无活跃时段数据</div>
         {% endif %}
       </div>
+      {% endif %}
       <div class="panel">
         <div class="panel-head"><span class="panel-title">角色使用</span><span class="panel-note">按场次 Top 5</span></div>
         {% if data.roles %}
@@ -1136,6 +1140,7 @@ body {
         <div class="empty">暂无角色使用数据</div>
         {% endif %}
       </div>
+      {% if not data.is_season_view %}
       <div class="panel">
         <div class="panel-head"><span class="panel-title">社交战绩</span><span class="panel-note">组排队友与对手</span></div>
         <div class="rel-section">
@@ -1171,11 +1176,12 @@ body {
           {% endif %}
         </div>
       </div>
+      {% endif %}
     </div>
     <div class="main">
       <div class="panel">
         <div class="panel-head">
-          <span class="panel-title">生涯总览</span>
+          <span class="panel-title">{% if data.is_season_view %}赛季总览{% else %}生涯总览{% endif %}</span>
           <span class="panel-note">全部 {{ data.rounds }} 场{% if data.ranked_strip %} · 排位 {{ data.ranked_strip.rounds }} 场{% endif %}</span>
         </div>
         <div class="summary-top">
@@ -1221,6 +1227,7 @@ body {
           </div>
         </div>
       </div>
+      {% if not data.is_season_view %}
       <div class="panel">
         <div class="panel-head">
           <span class="panel-title">近期状态</span>
@@ -1337,8 +1344,9 @@ body {
         <div class="trend-empty">排位对局不足，暂时无法绘制趋势</div>
         {% endif %}
       </div>
+      {% endif %}
       <div class="panel">
-        <div class="panel-head"><span class="panel-title">模式统计</span><span class="panel-note">当前赛季</span></div>
+        <div class="panel-head"><span class="panel-title">模式统计</span><span class="panel-note">{% if data.is_season_view %}{{ data.season }}{% else %}当前赛季{% endif %}</span></div>
         {% if data.modes %}
           {% for mode in data.modes %}
           <div class="mode-block">

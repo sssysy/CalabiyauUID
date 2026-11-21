@@ -5,8 +5,14 @@ from datetime import datetime
 from gsuid_core.models import Event
 from gsuid_core.ai_core.register import ai_tools
 
-from ...utils.api.dakanu import DakanuError
+from ...utils.api.dakanu import DakanuError, fetch_player_season
 from ...utils.helper.maps import resolve_map, resolve_role_name
+from ...utils.helper.season import (
+    ResolvedSeason,
+    build_season_profile,
+    resolve_season_query,
+    split_season_and_target,
+)
 from ...utils.helper.refresh import ensure_player_snapshot
 from ...utils.helper.ai_bridge import format_player_snapshot_summary
 from ...utils.database.model_bind import get_main_uid
@@ -30,18 +36,33 @@ _RECENT_TEXT_LIMIT = 10
     aliases=["卡拉彼丘·纯文本查战绩", "卡拉彼丘·战绩分析数据"],
     timeout=30.0,
 )
-async def calabiyau_query_player_text(ev: Event, query: str = "") -> str:
+async def calabiyau_query_player_text(ev: Event, query: str = "", season: str = "") -> str:
     """
     以纯文本读取卡拉彼丘玩家的本地快照战绩与最近对局列表（不渲染图片）。
-    适合需要快速获取数值做复盘、对比段位/胜率或提取对局 roomId 时调用；本地无快照或已超过 1 天时会自动拉取最新快照。
+    适合需要快速获取数值做复盘、对比段位/胜率或提取对局 roomId 时调用；支持指定赛季（历史赛季实时请求对应赛季接口，不返回近期对局列表）。
 
     Args:
         query: 目标玩家纯数字 UID 或游戏昵称；留空则自动读取当前用户绑定的主账号（如消息@了他人则读取被@者）
+        season: 可选赛季名（支持 s26ep6、26sp6、s26、s13 等，大小写不敏感）；留空表示当前赛季
     """
-    cleaned = query.strip()
-    if cleaned:
+    season_token = season.strip()
+    target_query = query.strip()
+    if not season_token and target_query:
+        parsed_season, parsed_target = split_season_and_target(target_query)
+        if parsed_season is not None:
+            season_token = parsed_season
+            target_query = parsed_target
+
+    resolved_season: ResolvedSeason | None = None
+    if season_token:
         try:
-            player_id = await resolve_player_input(cleaned)
+            resolved_season = await resolve_season_query(season_token)
+        except DakanuError as exc:
+            return str(exc)
+
+    if target_query:
+        try:
+            player_id = await resolve_player_input(target_query)
         except DakanuError as exc:
             return f"解析目标玩家失败：{exc}"
     else:
@@ -59,6 +80,24 @@ async def calabiyau_query_player_text(ev: Event, query: str = "") -> str:
         snapshot = await ensure_player_snapshot(player_id)
     except DakanuError as exc:
         return f"获取 UID {player_id} 的战绩快照失败：{exc}"
+
+    if resolved_season is not None and not resolved_season.current and resolved_season.season_id > 0:
+        try:
+            season_data = await fetch_player_season(player_id, resolved_season.season_id)
+        except DakanuError as exc:
+            return f"获取 UID {player_id} 的 {resolved_season.label} 赛季战绩失败：{exc}"
+        if season_data is None or season_data["summary"]["rounds"] <= 0:
+            return f"该玩家（UID：{player_id}）在 {resolved_season.label} 暂无战绩记录。"
+        season_profile = build_season_profile(snapshot.profile, season_data)
+        challenge_tier = resolve_challenge_tier(season_data["leisure"], None)
+        challenge_label, _, _ = challenge_tier_display(challenge_tier)
+        return format_player_snapshot_summary(
+            snapshot,
+            tier_name_fn=lambda segment: tier_display(segment)[0],
+            challenge_label=challenge_label,
+            profile_override=season_profile,
+            is_season_view=True,
+        )
 
     challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])
     challenge_label, _, _ = challenge_tier_display(challenge_tier)

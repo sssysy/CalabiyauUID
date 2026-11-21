@@ -920,6 +920,8 @@ class DakanuRankingsBoard(TypedDict):
     updatedAt: int
     cachedAt: int | None
     entries: list[DakanuRankingEntry]
+    seasonApplied: NotRequired[bool | None]
+    seasonLabel: NotRequired[str | None]
 
 
 class DakanuRankingFloorCurrent(TypedDict):
@@ -947,6 +949,43 @@ class DakanuRankedSeason(TypedDict):
 class DakanuCurrentSeason(TypedDict):
     ok: bool
     ranked_season: DakanuRankedSeason
+
+
+class DakanuRankingSeasonItem(TypedDict):
+    season_id: int
+    label: str
+    current: bool
+    rank_types: list[int]
+    fetched_at: int | None
+
+
+class DakanuRankingSeasons(TypedDict):
+    ok: bool
+    current: DakanuRankedSeason
+    seasons: list[DakanuRankingSeasonItem]
+
+
+class DakanuSeasonRankPoint(TypedDict):
+    segment: int | None
+    stars: int | None
+    rankPosition: int | None
+    divisionScore: int | None
+    gradeScore: int | None
+
+
+class DakanuPlayerSeason(TypedDict):
+    seasonId: int
+    seasonLabel: str
+    final: DakanuSeasonRankPoint
+    top: DakanuSeasonRankPoint
+    historicalTopSegment: int | None
+    historicalTopPosition: int | None
+    superStringCount: int | None
+    favoriteRoles: list[int]
+    leisure: DakanuLeisure | None
+    summary: DakanuSummary
+    modes: list[DakanuMode]
+    roles: list[DakanuRole]
 
 
 class DakanuRolesRankingEntry(TypedDict):
@@ -977,6 +1016,7 @@ class DakanuRolesRankingBoard(TypedDict):
 
 _META_CACHE_TTL_SECONDS = 300.0
 _meta_roles_cache: tuple[float, dict[int, str]] | None = None
+_ranking_seasons_cache: tuple[float, DakanuRankingSeasons] | None = None
 
 
 def _as_int(value: object) -> int | None:
@@ -1103,7 +1143,13 @@ def _parse_rankings_board(payload: object) -> DakanuRankingsBoard | None:
         entry = _parse_ranking_entry(item)
         if entry is not None:
             entries.append(entry)
-    return {
+    raw_query = payload["query"] if "query" in payload else None
+    season_applied: bool | None = None
+    if isinstance(raw_query, dict) and "seasonApplied" in raw_query:
+        raw_applied = raw_query["seasonApplied"]
+        if isinstance(raw_applied, bool):
+            season_applied = raw_applied
+    board: DakanuRankingsBoard = {
         "ok": True,
         "scope": scope,
         "rankType": {"code": type_code, "key": type_key, "label": type_label},
@@ -1117,6 +1163,12 @@ def _parse_rankings_board(payload: object) -> DakanuRankingsBoard | None:
         "cachedAt": cached_at,
         "entries": entries,
     }
+    if season_applied is not None:
+        board["seasonApplied"] = season_applied
+    season_label = _opt_str(payload, "seasonLabel")
+    if season_label is not None:
+        board["seasonLabel"] = season_label
+    return board
 
 
 @to_thread
@@ -1125,10 +1177,13 @@ def _fetch_rankings_sync(
     page: int,
     page_size: int,
     sub_type: int | None,
+    season_id: int,
 ) -> DakanuRankingsBoard:
     params: dict[str, int] = {"type": rank_type, "page": page, "page_size": page_size}
     if sub_type is not None:
         params["sub_type"] = sub_type
+    if season_id > 0:
+        params["season_id"] = season_id
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(
@@ -1165,9 +1220,10 @@ async def fetch_rankings(
     page_size: int = 50,
     *,
     sub_type: int | None = None,
+    season_id: int = 0,
 ) -> DakanuRankingsBoard:
     """读取 Dakanu 在线排行榜数据。"""
-    return await _fetch_rankings_sync(rank_type, page, page_size, sub_type)
+    return await _fetch_rankings_sync(rank_type, page, page_size, sub_type, season_id)
 
 
 def _parse_ranking_floor(payload: object) -> DakanuRankingFloor | None:
@@ -1269,6 +1325,361 @@ def _fetch_current_season_sync() -> DakanuCurrentSeason | None:
 async def fetch_current_season() -> DakanuCurrentSeason | None:
     """读取当前排位赛季信息；接口异常时返回 None。"""
     return await _fetch_current_season_sync()
+
+
+def _parse_ranked_season_item(raw: object) -> DakanuRankedSeason | None:
+    if not isinstance(raw, dict):
+        return None
+    season_id = _opt_int(raw, "season_id")
+    label = _opt_str(raw, "label")
+    current = raw["current"] if "current" in raw else None
+    if season_id is None or label is None or not isinstance(current, bool):
+        return None
+    return {
+        "season_id": season_id,
+        "label": label,
+        "current": current,
+    }
+
+
+def _parse_ranking_seasons(payload: object) -> DakanuRankingSeasons | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    current = _parse_ranked_season_item(payload["current"] if "current" in payload else None)
+    raw_seasons = payload["seasons"] if "seasons" in payload else None
+    if current is None or not isinstance(raw_seasons, list):
+        return None
+    seasons: list[DakanuRankingSeasonItem] = []
+    for raw_item in raw_seasons:
+        base = _parse_ranked_season_item(raw_item)
+        if base is None or not isinstance(raw_item, dict):
+            continue
+        raw_types = raw_item["rank_types"] if "rank_types" in raw_item else None
+        rank_types: list[int] = []
+        if isinstance(raw_types, list):
+            for item in raw_types:
+                type_code = _as_int(item)
+                if type_code is not None:
+                    rank_types.append(type_code)
+        seasons.append(
+            {
+                "season_id": base["season_id"],
+                "label": base["label"],
+                "current": base["current"],
+                "rank_types": rank_types,
+                "fetched_at": _opt_int(raw_item, "fetched_at"),
+            }
+        )
+    return {
+        "ok": True,
+        "current": current,
+        "seasons": seasons,
+    }
+
+
+@to_thread
+def _fetch_ranking_seasons_sync() -> DakanuRankingSeasons:
+    global _ranking_seasons_cache
+    now = time.monotonic()
+    if _ranking_seasons_cache is not None and now < _ranking_seasons_cache[0]:
+        return _ranking_seasons_cache[1]
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(f"{BASE_URL}/api/rankings/seasons")
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·赛季查询] 请求赛季列表失败：{exc}")
+        raise DakanuError("读取赛季列表失败，请稍后再试。") from None
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法读取赛季列表，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·赛季查询] 读取赛季列表返回 HTTP {response.status_code}")
+        raise DakanuError("读取赛季列表失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning("[卡拉彼丘·赛季查询] 赛季列表返回非 JSON 响应")
+        raise DakanuError("赛季列表格式异常，请稍后再试。") from None
+    parsed = _parse_ranking_seasons(payload)
+    if parsed is None:
+        logger.warning("[卡拉彼丘·赛季查询] 赛季列表响应结构异常")
+        raise DakanuError("赛季列表格式异常，请稍后再试。")
+    _ranking_seasons_cache = (time.monotonic() + _META_CACHE_TTL_SECONDS, parsed)
+    return parsed
+
+
+async def fetch_ranking_seasons() -> DakanuRankingSeasons:
+    """读取 Dakanu `/api/rankings/seasons` 赛季目录，带 5 分钟内存缓存。"""
+    return await _fetch_ranking_seasons_sync()
+
+
+def _parse_season_rank_point(raw: object) -> DakanuSeasonRankPoint:
+    if not isinstance(raw, dict):
+        return {
+            "segment": None,
+            "stars": None,
+            "rankPosition": None,
+            "divisionScore": None,
+            "gradeScore": None,
+        }
+    return {
+        "segment": _opt_int(raw, "segment"),
+        "stars": _opt_int(raw, "stars"),
+        "rankPosition": _opt_int(raw, "rankPosition"),
+        "divisionScore": _opt_int(raw, "divisionScore"),
+        "gradeScore": _opt_int(raw, "gradeScore"),
+    }
+
+
+def _parse_season_summary(raw: object) -> DakanuSummary | None:
+    if not isinstance(raw, dict):
+        return None
+    rounds = _opt_int(raw, "rounds")
+    wins = _opt_int(raw, "wins")
+    losses = _opt_int(raw, "losses")
+    win_rate = _opt_float(raw, "winRate")
+    kills = _opt_int(raw, "kills")
+    assists = _opt_int(raw, "assists")
+    deaths = _opt_int(raw, "deaths")
+    kd = _opt_float(raw, "kd")
+    kda = _opt_float(raw, "kda")
+    damage = _opt_int(raw, "damage")
+    avg_damage = _opt_float(raw, "avgDamage")
+    round_avg_damage = _opt_float(raw, "roundAveDamage")
+    avg_kill = _opt_float(raw, "avgKill")
+    avg_assist = _opt_float(raw, "avgAssist")
+    avg_death = _opt_float(raw, "avgDeath")
+    mvp_count = _opt_int(raw, "mvpCount")
+    mvp_rate = _opt_float(raw, "mvpRate")
+    headshot_rate = _opt_float(raw, "headshotRate")
+    if rounds is None or wins is None or losses is None:
+        return None
+    return {
+        "rounds": rounds,
+        "wins": wins,
+        "losses": losses,
+        "winRate": win_rate if win_rate is not None else 0.0,
+        "kills": kills if kills is not None else 0,
+        "assists": assists if assists is not None else 0,
+        "deaths": deaths if deaths is not None else 0,
+        "kd": kd if kd is not None else 0.0,
+        "kda": kda if kda is not None else 0.0,
+        "damage": damage if damage is not None else 0,
+        "avgDamage": avg_damage if avg_damage is not None else 0.0,
+        "roundAveDamage": round_avg_damage if round_avg_damage is not None else 0.0,
+        "avgKill": avg_kill if avg_kill is not None else 0.0,
+        "avgAssist": avg_assist if avg_assist is not None else 0.0,
+        "avgDeath": avg_death if avg_death is not None else 0.0,
+        "mvpCount": mvp_count if mvp_count is not None else 0,
+        "mvpRate": mvp_rate if mvp_rate is not None else 0.0,
+        "headshotRate": headshot_rate if headshot_rate is not None else 0.0,
+    }
+
+
+def _parse_season_mode(raw: object) -> DakanuMode | None:
+    if not isinstance(raw, dict):
+        return None
+    mode = _opt_str(raw, "mode")
+    label = _opt_str(raw, "label")
+    rounds = _opt_int(raw, "rounds")
+    wins = _opt_int(raw, "wins")
+    if mode is None or label is None or rounds is None or wins is None:
+        return None
+    win_rate = _opt_float(raw, "winRate")
+    kd = _opt_float(raw, "kd")
+    avg_damage = _opt_float(raw, "avgDamage")
+    round_avg_damage = _opt_float(raw, "roundAveDamage")
+    avg_kill = _opt_float(raw, "avgKill")
+    headshot_rate = _opt_float(raw, "headshotRate")
+    mvp_rate = _opt_float(raw, "mvpRate")
+    result: DakanuMode = {
+        "mode": mode,
+        "label": label,
+        "rounds": rounds,
+        "wins": wins,
+        "winRate": win_rate if win_rate is not None else 0.0,
+        "kd": kd if kd is not None else 0.0,
+        "avgDamage": avg_damage if avg_damage is not None else 0.0,
+        "roundAveDamage": round_avg_damage if round_avg_damage is not None else 0.0,
+        "avgKill": avg_kill if avg_kill is not None else 0.0,
+        "avgAssist": _opt_float(raw, "avgAssist"),
+        "headshotRate": headshot_rate if headshot_rate is not None else 0.0,
+        "mvpCount": _opt_int(raw, "mvpCount"),
+        "mvpRate": mvp_rate if mvp_rate is not None else 0.0,
+    }
+    kills = _opt_int(raw, "kills")
+    if kills is not None:
+        result["kills"] = kills
+    assists = _opt_int(raw, "assists")
+    if assists is not None:
+        result["assists"] = assists
+    deaths = _opt_int(raw, "deaths")
+    if deaths is not None:
+        result["deaths"] = deaths
+    damage = _opt_int(raw, "damage")
+    if damage is not None:
+        result["damage"] = damage
+    kda = _opt_float(raw, "kda")
+    if kda is not None:
+        result["kda"] = kda
+    avg_death = _opt_float(raw, "avgDeath")
+    if avg_death is not None:
+        result["avgDeath"] = avg_death
+    return result
+
+
+def _parse_season_role(raw: object) -> DakanuRole | None:
+    if not isinstance(raw, dict):
+        return None
+    role_id = _opt_int(raw, "roleId")
+    name = _opt_str(raw, "name")
+    count = _opt_int(raw, "count")
+    wins = _opt_int(raw, "wins")
+    if role_id is None or name is None or count is None or wins is None:
+        return None
+    win_rate = _opt_float(raw, "winRate")
+    kills = _opt_int(raw, "kills")
+    deaths = _opt_int(raw, "deaths")
+    kd = _opt_float(raw, "kd")
+    damage = _opt_int(raw, "damage")
+    avg_damage = _opt_float(raw, "avgDamage")
+    max_kill = _opt_int(raw, "maxKill")
+    max_damage = _opt_int(raw, "maxDamage")
+    return {
+        "roleId": role_id,
+        "name": name,
+        "count": count,
+        "wins": wins,
+        "winRate": win_rate if win_rate is not None else 0.0,
+        "kills": kills if kills is not None else 0,
+        "deaths": deaths if deaths is not None else 0,
+        "kd": kd if kd is not None else 0.0,
+        "damage": damage if damage is not None else 0,
+        "avgDamage": avg_damage if avg_damage is not None else 0.0,
+        "maxKill": max_kill if max_kill is not None else 0,
+        "maxDamage": max_damage if max_damage is not None else 0,
+    }
+
+
+def _parse_season_leisure(raw: object) -> DakanuLeisure | None:
+    if not isinstance(raw, dict):
+        return None
+    leisure: DakanuLeisure = {}
+    score = _opt_int(raw, "score")
+    if score is not None:
+        leisure["score"] = score
+    segment = _opt_int(raw, "segment")
+    if segment is not None:
+        leisure["segment"] = segment
+    star = _opt_int(raw, "star")
+    if star is not None:
+        leisure["star"] = star
+    star_score = _opt_int(raw, "starScore")
+    if star_score is not None:
+        leisure["starScore"] = star_score
+    battles = _opt_int(raw, "battles")
+    if battles is not None:
+        leisure["battles"] = battles
+    wins = _opt_int(raw, "wins")
+    if wins is not None:
+        leisure["wins"] = wins
+    win_rate = _opt_float(raw, "winRate")
+    if win_rate is not None:
+        leisure["winRate"] = win_rate
+    mvp_count = _opt_int(raw, "mvpCount")
+    if mvp_count is not None:
+        leisure["mvpCount"] = mvp_count
+    return leisure if leisure else None
+
+
+def _parse_player_season(payload: object) -> DakanuPlayerSeason | None:
+    if not isinstance(payload, dict) or "ok" not in payload or payload["ok"] is not True:
+        return None
+    raw_season = payload["season"] if "season" in payload else None
+    if not isinstance(raw_season, dict):
+        return None
+    season_id = _opt_int(raw_season, "seasonId")
+    season_label = _opt_str(raw_season, "seasonLabel")
+    summary = _parse_season_summary(raw_season["summary"] if "summary" in raw_season else None)
+    if season_id is None or season_label is None or summary is None:
+        return None
+    modes: list[DakanuMode] = []
+    raw_modes = raw_season["modes"] if "modes" in raw_season else None
+    if isinstance(raw_modes, list):
+        for item in raw_modes:
+            parsed_mode = _parse_season_mode(item)
+            if parsed_mode is not None:
+                modes.append(parsed_mode)
+    roles: list[DakanuRole] = []
+    raw_roles = raw_season["roles"] if "roles" in raw_season else None
+    if isinstance(raw_roles, list):
+        for item in raw_roles:
+            parsed_role = _parse_season_role(item)
+            if parsed_role is not None:
+                roles.append(parsed_role)
+    favorite_roles: list[int] = []
+    raw_favs = raw_season["favoriteRoles"] if "favoriteRoles" in raw_season else None
+    if isinstance(raw_favs, list):
+        for item in raw_favs:
+            role_id = _as_int(item)
+            if role_id is not None:
+                favorite_roles.append(role_id)
+    return {
+        "seasonId": season_id,
+        "seasonLabel": season_label,
+        "final": _parse_season_rank_point(raw_season["final"] if "final" in raw_season else None),
+        "top": _parse_season_rank_point(raw_season["top"] if "top" in raw_season else None),
+        "historicalTopSegment": _opt_int(raw_season, "historicalTopSegment"),
+        "historicalTopPosition": _opt_int(raw_season, "historicalTopPosition"),
+        "superStringCount": _opt_int(raw_season, "superStringCount"),
+        "favoriteRoles": favorite_roles,
+        "leisure": _parse_season_leisure(raw_season["leisure"] if "leisure" in raw_season else None),
+        "summary": summary,
+        "modes": modes,
+        "roles": roles,
+    }
+
+
+@to_thread
+def _fetch_player_season_sync(player_id: str, season_id: int) -> DakanuPlayerSeason | None:
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            response = client.get(
+                f"{BASE_URL}/api/summoner/{quote(player_id, safe='')}/seasons",
+                params={"season_id": season_id},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning(f"[卡拉彼丘·战绩总览] 请求玩家 {player_id} 赛季 {season_id} 数据失败：{exc}")
+        raise DakanuError("读取赛季战绩失败，请稍后再试。") from None
+    if response.status_code in {204, 404}:
+        return None
+    if response.status_code in {401, 403}:
+        raise DakanuError("该玩家已开启隐私保护，无法查看该赛季战绩。")
+    if response.status_code == 409:
+        raise DakanuError("战绩站上游会话暂不可用，请稍后再试。")
+    if response.status_code == 429:
+        raise DakanuError("查询过于频繁，请稍后再试。")
+    if response.status_code in {502, 503, 504}:
+        raise DakanuError("战绩站暂时无法读取该赛季数据，请稍后再试。")
+    if response.status_code != 200:
+        logger.warning(f"[卡拉彼丘·战绩总览] 读取玩家 {player_id} 赛季 {season_id} 返回 HTTP {response.status_code}")
+        raise DakanuError("读取赛季战绩失败，请稍后再试。")
+    try:
+        payload: object = response.json()
+    except ValueError:
+        logger.warning(f"[卡拉彼丘·战绩总览] 玩家 {player_id} 赛季 {season_id} 返回非 JSON 响应")
+        raise DakanuError("赛季战绩数据格式异常，请稍后再试。") from None
+    parsed = _parse_player_season(payload)
+    if parsed is None:
+        logger.warning(f"[卡拉彼丘·战绩总览] 玩家 {player_id} 赛季 {season_id} 响应结构异常")
+        raise DakanuError("赛季战绩数据格式异常，请稍后再试。")
+    return parsed
+
+
+async def fetch_player_season(player_id: str, season_id: int) -> DakanuPlayerSeason | None:
+    """按需读取玩家指定历史赛季战绩，无数据时返回 None。"""
+    return await _fetch_player_season_sync(player_id, season_id)
 
 
 def _parse_roles_ranking_entry(raw: object) -> DakanuRolesRankingEntry | None:

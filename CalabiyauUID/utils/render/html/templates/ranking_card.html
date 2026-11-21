@@ -484,7 +484,7 @@ body {
       <div class="head-actions">
         {% if data.floor is not none %}
         <div class="head-pill">
-          <span>当前奇点底分</span>
+          <span>{% if data.is_historical_season %}赛季奇点底分{% else %}当前奇点底分{% endif %}</span>
           <strong>{{ data.floor.score }}</strong>
           {% if data.floor.delta_text %}
           <span class="pill-delta {{ data.floor.delta_class }}">{{ data.floor.delta_text }}</span>
@@ -493,7 +493,7 @@ body {
         {% endif %}
         {% if data.season_label %}
         <div class="head-pill">
-          <span>当前赛季</span>
+          <span>{% if data.is_historical_season %}赛季{% else %}当前赛季{% endif %}</span>
           <strong class="season-val">{{ data.season_label }}</strong>
         </div>
         {% endif %}

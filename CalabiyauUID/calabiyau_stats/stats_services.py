@@ -4,7 +4,14 @@ import base64
 
 from gsuid_core.models import Event
 
-from ..utils.api.dakanu import DakanuError, role_image_url, avatar_image_url
+from ..utils.api.dakanu import (
+    DakanuError,
+    DakanuProfile,
+    DakanuPlayerSeason,
+    role_image_url,
+    avatar_image_url,
+    fetch_player_season,
+)
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import (
     local_role_image,
@@ -14,6 +21,12 @@ from ..utils.helper.assets import (
     local_baseplate_image,
     local_frame_index_image,
     local_challenge_tier_image,
+)
+from ..utils.helper.season import (
+    ResolvedSeason,
+    build_season_profile,
+    resolve_season_query,
+    split_season_and_target,
 )
 from ..utils.helper.refresh import ensure_player_snapshot as _ensure_fresh_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text, format_player_snapshot_summary
@@ -30,9 +43,7 @@ from ..utils.render.html.renderer.summary_card import (
 )
 
 
-async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
-    """按 UID/昵称、@ 用户、当前账号的顺序解析查询目标。"""
-    raw_text = ev.text.strip()
+async def _resolve_target_player_id(ev: Event, raw_text: str) -> tuple[str, str | None]:
     if raw_text:
         try:
             player_id = await resolve_player_input(raw_text)
@@ -51,25 +62,66 @@ async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
     return "", "对方尚未绑定卡拉彼丘账号。"
 
 
+async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
+    """按 UID/昵称、@ 用户、当前账号的顺序解析查询目标。"""
+    return await _resolve_target_player_id(ev, ev.text.strip())
+
+
+async def resolve_stats_query(ev: Event) -> tuple[str, ResolvedSeason | None, str | None]:
+    """从命令文本中解析可选赛季与查询目标玩家。"""
+    season_token, target_text = split_season_and_target(ev.text)
+    season: ResolvedSeason | None = None
+    if season_token is not None:
+        try:
+            season = await resolve_season_query(season_token)
+        except DakanuError as exc:
+            return "", None, str(exc)
+    player_id, error = await _resolve_target_player_id(ev, target_text)
+    if error is not None:
+        return "", None, error
+    return player_id, season, None
+
+
 async def ensure_player_snapshot(player_id: str, *, refresh: bool = False) -> PlayerSnapshot:
     return await _ensure_fresh_snapshot(player_id, force=refresh)
 
 
-def format_snapshot_ai_summary(snapshot: PlayerSnapshot) -> str:
+def format_snapshot_ai_summary(
+    snapshot: PlayerSnapshot,
+    *,
+    profile_override: DakanuProfile | None = None,
+    season_data: DakanuPlayerSeason | None = None,
+) -> str:
     """从玩家快照提取供 AI 决策与复盘的结构化文本摘要。"""
-    challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])
+    is_season_view = season_data is not None
+    effective_leisure = season_data["leisure"] if season_data is not None else snapshot.leisure
+    presence = None if is_season_view else snapshot.profile["presence"]
+    challenge_tier = resolve_challenge_tier(effective_leisure, presence)
     challenge_label, _, _ = challenge_tier_display(challenge_tier)
     return format_player_snapshot_summary(
         snapshot,
         tier_name_fn=lambda segment: tier_display(segment)[0],
         challenge_label=challenge_label,
+        profile_override=profile_override,
+        is_season_view=is_season_view,
     )
 
 
-async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
-    emit_ai_text(format_snapshot_ai_summary(snapshot))
-    profile = snapshot.profile
-    leisure = snapshot.leisure
+async def render_snapshot_card(
+    snapshot: PlayerSnapshot,
+    *,
+    season_data: DakanuPlayerSeason | None = None,
+) -> bytes:
+    is_season_view = season_data is not None
+    profile = build_season_profile(snapshot.profile, season_data) if season_data is not None else snapshot.profile
+    leisure = season_data["leisure"] if season_data is not None else snapshot.leisure
+    emit_ai_text(
+        format_snapshot_ai_summary(
+            snapshot,
+            profile_override=profile if is_season_view else None,
+            season_data=season_data,
+        )
+    )
     avatar_id = profile["player"]["avatarId"]
     border_id = profile["player"]["borderId"]
     avatar_url = f"https://www.dakanu.com/avatars/{avatar_id}.webp"
@@ -83,7 +135,7 @@ async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
     top_tier = tier_index(profile["rank"]["historicalSegment"])
     tier_path = local_tier_image(rank_tier) if rank_tier else None
     top_tier_path = local_tier_image(top_tier) if top_tier else None
-    challenge_tier = resolve_challenge_tier(leisure, profile["presence"])
+    challenge_tier = resolve_challenge_tier(leisure, None if is_season_view else profile["presence"])
     challenge_path = local_challenge_tier_image(challenge_tier) if challenge_tier else None
     if avatar_path is None or (rank_tier and tier_path is None) or (top_tier and top_tier_path is None):
         raise DakanuError("玩家图片读取失败，请稍后再试。")
@@ -92,9 +144,10 @@ async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
     for role in profile["roles"][:5]:
         if role["roleId"] not in role_ids:
             role_ids.append(role["roleId"])
-    for match in profile["matches"][:20]:
-        if match["roleId"] > 0 and match["roleId"] not in role_ids:
-            role_ids.append(match["roleId"])
+    if not is_season_view:
+        for match in profile["matches"][:20]:
+            if match["roleId"] > 0 and match["roleId"] not in role_ids:
+                role_ids.append(match["roleId"])
 
     role_images: dict[int, str] = {}
     for role_id in role_ids:
@@ -103,14 +156,15 @@ async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
             role_images[role_id] = _data_uri(path.read_bytes(), path.suffix)
 
     rel_avatar_ids: list[int] = []
-    if "teamUps" in profile:
-        for team_up in profile["teamUps"][:5]:
-            if team_up["avatarId"] > 0 and team_up["avatarId"] not in rel_avatar_ids:
-                rel_avatar_ids.append(team_up["avatarId"])
-    if "rivals" in profile:
-        for rival in profile["rivals"][:5]:
-            if rival["avatarId"] > 0 and rival["avatarId"] not in rel_avatar_ids:
-                rel_avatar_ids.append(rival["avatarId"])
+    if not is_season_view:
+        if "teamUps" in profile:
+            for team_up in profile["teamUps"][:5]:
+                if team_up["avatarId"] > 0 and team_up["avatarId"] not in rel_avatar_ids:
+                    rel_avatar_ids.append(team_up["avatarId"])
+        if "rivals" in profile:
+            for rival in profile["rivals"][:5]:
+                if rival["avatarId"] > 0 and rival["avatarId"] not in rel_avatar_ids:
+                    rel_avatar_ids.append(rival["avatarId"])
 
     avatar_images: dict[int, str] = {}
     for rel_avatar_id in rel_avatar_ids:
@@ -134,14 +188,20 @@ async def render_snapshot_card(snapshot: PlayerSnapshot) -> bytes:
         clan_name=snapshot.clan["name"] if snapshot.clan is not None else "",
         leisure=leisure,
         avatar_images=avatar_images,
+        is_season_view=is_season_view,
     )
     return await render_summary_card(profile, assets)
 
 
-async def build_summary_card(player_id: str) -> bytes:
+async def build_summary_card(player_id: str, *, season: ResolvedSeason | None = None) -> bytes:
     """读取本地快照渲染；无快照或超过 1 天时静默拉取最新快照。"""
     snapshot = await ensure_player_snapshot(player_id)
-    return await render_snapshot_card(snapshot)
+    if season is None or season.current or season.season_id <= 0:
+        return await render_snapshot_card(snapshot)
+    season_data = await fetch_player_season(player_id, season.season_id)
+    if season_data is None or season_data["summary"]["rounds"] <= 0:
+        raise DakanuError(f"该玩家在 {season.label} 暂无战绩记录。")
+    return await render_snapshot_card(snapshot, season_data=season_data)
 
 
 def _data_uri(content: bytes, suffix: str) -> str:

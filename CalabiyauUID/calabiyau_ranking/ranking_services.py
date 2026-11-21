@@ -33,6 +33,7 @@ from ..utils.helper.assets import (
     local_avatar_image,
     local_challenge_tier_image,
 )
+from ..utils.helper.season import ResolvedSeason, resolve_season_query, split_season_and_target
 from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.render.html.renderer.ranking_card import RankingCardAssets, render_ranking_card
 from ..utils.render.html.renderer.summary_card import (
@@ -45,7 +46,7 @@ from ..utils.render.html.renderer.roles_ranking_card import render_roles_ranking
 
 _CACHE_TTL_SECONDS = 30.0
 _DOWNLOAD_CONCURRENCY = 8
-_ROLE_USAGE_PREFIX = "请提供角色名或角色 ID，例如：kq超弦体排行 星绘 或 kq超弦体排行 146"
+_ROLE_USAGE_PREFIX = "请提供角色名或角色 ID（可附带赛季名），例如：kq超弦体排行 星绘、kq超弦体排行 s26ep5 星绘"
 
 RolesSortBy = Literal["winRate", "appearanceRate"]
 TierMode = Literal["ranked", "challenge", "none"]
@@ -59,7 +60,7 @@ class _RankingCardCache:
 
 
 _board_cache_lock = asyncio.Lock()
-_cached_board_cards: dict[tuple[int, int | None], _RankingCardCache] = {}
+_cached_board_cards: dict[tuple[int, int | None, int], _RankingCardCache] = {}
 _roles_cache_lock = asyncio.Lock()
 _cached_roles_cards: dict[tuple[RolesSortBy, bool], _RankingCardCache] = {}
 
@@ -165,25 +166,81 @@ async def _build_assets(board: DakanuRankingsBoard, tier_mode: TierMode) -> Rank
     )
 
 
+async def resolve_ranking_season(raw_text: str) -> tuple[ResolvedSeason | None, str | None]:
+    """解析排行榜可选赛季参数；留空返回 None 表示当前赛季。"""
+    cleaned = raw_text.strip()
+    if not cleaned:
+        return None, None
+    try:
+        season = await resolve_season_query(cleaned)
+    except DakanuError as exc:
+        return None, str(exc)
+    return season, None
+
+
+async def resolve_role_board_query(raw_text: str) -> tuple[ResolvedSeason | None, str, str | None]:
+    """解析超弦体排行中的可选赛季与角色查询词。"""
+    season_token, role_query = split_season_and_target(raw_text)
+    if not role_query:
+        return None, "", None
+    if season_token is None:
+        return None, role_query, None
+    try:
+        season = await resolve_season_query(season_token)
+    except DakanuError as exc:
+        return None, "", str(exc)
+    return season, role_query, None
+
+
 async def _fetch_ranking_bundle(
     rank_type: int,
     *,
     sub_type: int | None,
     include_floor: bool,
+    season: ResolvedSeason | None = None,
 ) -> tuple[DakanuRankingsBoard, DakanuRankingFloor | None, str]:
+    season_id = season.season_id if season is not None and not season.current else 0
+    if season is not None:
+        if include_floor:
+            board, floor = await asyncio.gather(
+                fetch_rankings(
+                    rank_type=rank_type,
+                    page=1,
+                    page_size=50,
+                    sub_type=sub_type,
+                    season_id=season_id,
+                ),
+                fetch_ranking_floor(season_id=season_id),
+            )
+        else:
+            board = await fetch_rankings(
+                rank_type=rank_type,
+                page=1,
+                page_size=50,
+                sub_type=sub_type,
+                season_id=season_id,
+            )
+            floor = None
+        season_label = season.label
+        if season_id > 0:
+            season_applied = board["seasonApplied"] if "seasonApplied" in board else None
+            if season_applied is False or not board["entries"]:
+                raise DakanuError(f"{season_label} 暂未收录该榜单数据。")
+        return board, floor, season_label
+
     if include_floor:
-        board, floor, season = await asyncio.gather(
+        board, floor, current_season = await asyncio.gather(
             fetch_rankings(rank_type=rank_type, page=1, page_size=50, sub_type=sub_type),
             fetch_ranking_floor(season_id=0),
             fetch_current_season(),
         )
     else:
-        board, season = await asyncio.gather(
+        board, current_season = await asyncio.gather(
             fetch_rankings(rank_type=rank_type, page=1, page_size=50, sub_type=sub_type),
             fetch_current_season(),
         )
         floor = None
-    season_label = season["ranked_season"]["label"] if season is not None else ""
+    season_label = current_season["ranked_season"]["label"] if current_season is not None else ""
     return board, floor, season_label
 
 
@@ -298,9 +355,11 @@ async def build_board_ranking_card(
     title_override: str | None = None,
     include_floor: bool = False,
     use_cache: bool = True,
+    season: ResolvedSeason | None = None,
 ) -> bytes:
     """拉取指定类型的排行榜前 50 名并渲染卡片，带 30 秒短时内存缓存。"""
-    cache_key = (rank_type, sub_type)
+    season_id = season.season_id if season is not None and not season.current else 0
+    cache_key = (rank_type, sub_type, season_id)
     async with _board_cache_lock:
         now = time.monotonic()
         if use_cache and cache_key in _cached_board_cards and now < _cached_board_cards[cache_key].expires_at:
@@ -312,6 +371,7 @@ async def build_board_ranking_card(
             rank_type,
             sub_type=sub_type,
             include_floor=include_floor,
+            season=season,
         )
         tier_mode = _tier_mode_for_rank_type(rank_type)
         summary = _format_board_ranking_ai_summary(board, floor, season_label, tier_mode, title_override)
@@ -324,6 +384,7 @@ async def build_board_ranking_card(
             assets,
             tier_mode=tier_mode,
             title_override=title_override,
+            is_historical_season=season_id > 0,
         )
         _cached_board_cards[cache_key] = _RankingCardCache(
             expires_at=time.monotonic() + _CACHE_TTL_SECONDS,

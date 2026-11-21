@@ -184,6 +184,7 @@ class SummaryAssets:
     avatar_frame: str = ""
     medal_images: Mapping[int, str] = field(default_factory=dict)
     avatar_images: Mapping[int, str] = field(default_factory=dict)
+    is_season_view: bool = False
 
 
 @dataclass(frozen=True)
@@ -376,6 +377,7 @@ class SummaryTemplateContext(CardTemplateContext):
     nickname: str = ""
     uid: str = ""
     season: str = ""
+    is_season_view: bool = False
     avatar: str = ""
     avatar_frame: str = ""
     region_label: str = ""
@@ -817,6 +819,8 @@ def _build_challenge_block(assets: SummaryAssets, presence: DakanuPresence) -> C
         if "winRate" in leisure and isinstance(leisure["winRate"], (int, float)):
             win_rate = float(leisure["winRate"])
         has_detail = "battles" in leisure
+    elif assets.is_season_view:
+        return None
     else:
         if "leisureScore" in presence and isinstance(presence["leisureScore"], int):
             score = presence["leisureScore"]
@@ -1187,6 +1191,7 @@ def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> Sum
         nickname=player["nickname"],
         uid=player["id"],
         season=profile["meta"]["currentSeason"],
+        is_season_view=assets.is_season_view,
         avatar=assets.avatar,
         avatar_frame=assets.avatar_frame,
         region_label=region_label,
@@ -1235,13 +1240,13 @@ def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> Sum
         mvp_rate=_pct(summary["mvpRate"]),
         mvp_count=summary["mvpCount"],
         ranked_strip=_build_ranked_strip(profile["modes"]),
-        recent_form=_build_recent_form(profile, assets.role_images),
-        trend=_build_trend(profile),
-        activity_hours=_build_activity_hours(profile["matches"]),
+        recent_form=None if assets.is_season_view else _build_recent_form(profile, assets.role_images),
+        trend=None if assets.is_season_view else _build_trend(profile),
+        activity_hours=None if assets.is_season_view else _build_activity_hours(profile["matches"]),
         roles=roles,
         modes=modes,
-        team_ups=_build_team_ups(profile, assets.avatar_images),
-        rivals=_build_rivals(profile, assets.avatar_images),
+        team_ups=() if assets.is_season_view else _build_team_ups(profile, assets.avatar_images),
+        rivals=() if assets.is_season_view else _build_rivals(profile, assets.avatar_images),
     )
 
 

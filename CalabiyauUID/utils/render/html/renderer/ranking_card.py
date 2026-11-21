@@ -73,6 +73,7 @@ class RankingTemplateContext(CardTemplateContext):
     compact_record: bool = False
     floor: FloorPillItem | None = None
     season_label: str = ""
+    is_historical_season: bool = False
     has_entries: bool = False
     podium: tuple[PodiumCardItem, ...] = ()
     rows: tuple[RankingRowItem, ...] = ()
@@ -220,6 +221,7 @@ def _build_ranking_context(
     *,
     tier_mode: str = "ranked",
     title_override: str | None = None,
+    is_historical_season: bool = False,
 ) -> RankingTemplateContext:
     entries = board["entries"]
     title = title_override if title_override else (board["rankType"]["label"] or "排行榜")
@@ -236,6 +238,7 @@ def _build_ranking_context(
         compact_record=not has_total_games and bool(entries),
         floor=_build_floor_item(floor),
         season_label=season_label,
+        is_historical_season=is_historical_season,
         has_entries=bool(entries),
         podium=tuple(_build_podium_item(entry, assets, tier_mode) for entry in podium_entries),
         rows=tuple(_build_row_item(entry, assets, tier_mode) for entry in entries[3:]),
@@ -250,6 +253,7 @@ def render_ranking_html(
     *,
     tier_mode: str = "ranked",
     title_override: str | None = None,
+    is_historical_season: bool = False,
 ) -> str:
     """生成排行榜完整 HTML 文档。"""
     context = _build_ranking_context(
@@ -259,6 +263,7 @@ def render_ranking_html(
         assets,
         tier_mode=tier_mode,
         title_override=title_override,
+        is_historical_season=is_historical_season,
     )
     return render_template("ranking_card.html", context)
 
@@ -271,6 +276,7 @@ async def render_ranking_card(
     *,
     tier_mode: str = "ranked",
     title_override: str | None = None,
+    is_historical_season: bool = False,
 ) -> bytes:
     """把排行榜渲染成 PNG 卡片。"""
     context = _build_ranking_context(
@@ -280,6 +286,7 @@ async def render_ranking_card(
         assets,
         tier_mode=tier_mode,
         title_override=title_override,
+        is_historical_season=is_historical_season,
     )
     return await render_card(
         "ranking_card.html",
