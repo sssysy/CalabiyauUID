@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from dataclasses import dataclass
 
 from gsuid_core.pool import to_thread
 from gsuid_core.models import Event
@@ -16,13 +17,26 @@ from ..utils.api.dakanu import (
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import image_data_uri, local_avatar_image
-from ..utils.helper.refresh import ensure_player_snapshot
+from ..utils.helper.refresh import (
+    RefreshResult,
+    ensure_player_snapshot,
+    ensure_player_snapshot_with_fallback,
+)
 from ..utils.helper.ai_bridge import emit_ai_text
+from ..utils.helper.player_data import PlayerSnapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import is_numeric_uid
 from ..utils.render.html.renderer.clan_card import render_clan_card
 
 _DOWNLOAD_CONCURRENCY = 8
+
+
+@dataclass(frozen=True)
+class ClanTargetResult:
+    clan: DakanuClan | None
+    error: str | None
+    player_id: str | None = None
+    pending_task: asyncio.Task[RefreshResult] | None = None
 
 
 def _read_image_uri(path: Path) -> str:
@@ -78,15 +92,19 @@ async def _resolve_by_query(query: str) -> DakanuClan:
     raise DakanuError(f"找到多个匹配的战队，请输入完整战队名称或改用战队 ID：\n{candidates}")
 
 
-async def resolve_clan_target(ev: Event) -> tuple[DakanuClan | None, str | None]:
-    """按战队名/ID、@ 用户或当前绑定账号所在战队解析目标战队。"""
+async def resolve_clan_target_with_refresh(
+    ev: Event,
+    *,
+    allow_stale_fallback: bool = True,
+) -> ClanTargetResult:
+    """按战队名/ID、@ 用户或当前绑定账号解析目标战队，并透传超时降级后的刷新任务。"""
     raw_query = ev.text.strip()
     if raw_query:
         try:
             clan = await _resolve_by_query(raw_query)
         except DakanuError as exc:
-            return None, str(exc)
-        return clan, None
+            return ClanTargetResult(clan=None, error=str(exc))
+        return ClanTargetResult(clan=clan, error=None)
 
     at_target = ev.at.strip() if ev.at is not None else ""
     is_self_at = at_target in {ev.bot_id, ev.real_bot_id, ev.bot_self_id}
@@ -94,25 +112,49 @@ async def resolve_clan_target(ev: Event) -> tuple[DakanuClan | None, str | None]
     player_id = await get_main_uid(ev.bot_id, target_user)
     if player_id is None:
         if target_user == ev.user_id:
-            return None, "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定，或发送 kq战队 <战队名或 ID> 查询。"
-        return None, "对方尚未绑定卡拉彼丘账号。"
+            return ClanTargetResult(
+                clan=None,
+                error="尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定，或发送 kq战队 <战队名或 ID> 查询。",
+            )
+        return ClanTargetResult(clan=None, error="对方尚未绑定卡拉彼丘账号。")
 
+    pending_task: asyncio.Task[RefreshResult] | None = None
     try:
-        snapshot = await ensure_player_snapshot(player_id)
+        if allow_stale_fallback:
+            fetched = await ensure_player_snapshot_with_fallback(player_id)
+            snapshot = fetched.snapshot
+            pending_task = fetched.pending_task
+        else:
+            snapshot = await ensure_player_snapshot(player_id)
     except DakanuError as exc:
-        return None, str(exc)
+        return ClanTargetResult(clan=None, error=str(exc))
 
     clan_id = snapshot.profile["player"]["clanId"].strip()
     if not clan_id:
         if target_user == ev.user_id:
-            return None, "当前账号暂未加入任何战队。"
-        return None, "对方账号暂未加入任何战队。"
+            return ClanTargetResult(clan=None, error="当前账号暂未加入任何战队。")
+        return ClanTargetResult(clan=None, error="对方账号暂未加入任何战队。")
 
     try:
         clan = await _resolve_by_query(clan_id)
     except DakanuError as exc:
-        return None, str(exc)
-    return clan, None
+        return ClanTargetResult(clan=None, error=str(exc))
+    return ClanTargetResult(clan=clan, error=None, player_id=player_id, pending_task=pending_task)
+
+
+async def resolve_clan_target(ev: Event) -> tuple[DakanuClan | None, str | None]:
+    """按战队名/ID、@ 用户或当前绑定账号所在战队解析目标战队。"""
+    result = await resolve_clan_target_with_refresh(ev, allow_stale_fallback=False)
+    return result.clan, result.error
+
+
+async def build_clan_card_from_snapshot(snapshot: PlayerSnapshot) -> bytes | None:
+    """基于最新快照重新拉取并渲染玩家所在战队卡片；未加入战队时返回 None。"""
+    clan_id = snapshot.profile["player"]["clanId"].strip()
+    if not clan_id:
+        return None
+    clan = await _resolve_by_query(clan_id)
+    return await build_clan_card(clan)
 
 
 def _format_clan_ai_summary(clan: DakanuClan, members: list[DakanuClanMember]) -> str:

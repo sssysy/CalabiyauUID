@@ -193,15 +193,24 @@ async def render_snapshot_card(
     return await render_summary_card(profile, assets)
 
 
-async def build_summary_card(player_id: str, *, season: ResolvedSeason | None = None) -> bytes:
-    """读取本地快照渲染；无快照或超过 1 天时静默拉取最新快照。"""
-    snapshot = await ensure_player_snapshot(player_id)
+async def render_summary_card_from_snapshot(
+    snapshot: PlayerSnapshot,
+    *,
+    season: ResolvedSeason | None = None,
+) -> bytes:
+    """基于给定快照渲染当前赛季或指定历史赛季战绩总览卡片。"""
     if season is None or season.current or season.season_id <= 0:
         return await render_snapshot_card(snapshot)
-    season_data = await fetch_player_season(player_id, season.season_id)
+    season_data = await fetch_player_season(snapshot.profile["player"]["id"], season.season_id)
     if season_data is None or season_data["summary"]["rounds"] <= 0:
         raise DakanuError(f"该玩家在 {season.label} 暂无战绩记录。")
     return await render_snapshot_card(snapshot, season_data=season_data)
+
+
+async def build_summary_card(player_id: str, *, season: ResolvedSeason | None = None) -> bytes:
+    """读取本地快照渲染；无快照或超过 1 天时静默拉取最新快照。"""
+    snapshot = await ensure_player_snapshot(player_id)
+    return await render_summary_card_from_snapshot(snapshot, season=season)
 
 
 def _data_uri(content: bytes, suffix: str) -> str:

@@ -5,8 +5,17 @@ from gsuid_core.bot import Bot
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
-from .matches_services import resolve_match_player_id, build_recent_matches_card
+from .matches_services import (
+    resolve_match_player_id,
+    build_recent_matches_card,
+    build_recent_matches_card_from_snapshot,
+)
 from ..utils.api.dakanu import DakanuError
+from ..utils.helper.refresh import (
+    BUSY_FALLBACK_NOTICE,
+    schedule_refreshed_card_push,
+    ensure_player_snapshot_with_fallback,
+)
 from .match_analysis_services import parse_analysis_room_id, build_match_analysis_card
 
 sv_matches = SV("卡拉彼丘历史战绩")
@@ -31,14 +40,38 @@ async def calabiyau_recent_matches(bot: Bot, ev: Event) -> None:
     if error is not None:
         await bot.send(error)
         return
+    if type(bot).__name__ == "MockBot":
+        try:
+            image = await build_recent_matches_card(player_id)
+        except DakanuError as exc:
+            await bot.send(str(exc))
+            return
+        except RuntimeError:
+            logger.exception("[卡拉彼丘·历史战绩] 渲染卡片失败")
+            await bot.send("历史战绩卡片生成失败，请稍后再试。")
+            return
+        await bot.send(image)
+        return
     try:
-        image = await build_recent_matches_card(player_id)
+        fetched = await ensure_player_snapshot_with_fallback(player_id)
+        image = await build_recent_matches_card_from_snapshot(fetched.snapshot)
     except DakanuError as exc:
         await bot.send(str(exc))
         return
     except RuntimeError:
         logger.exception("[卡拉彼丘·历史战绩] 渲染卡片失败")
         await bot.send("历史战绩卡片生成失败，请稍后再试。")
+        return
+    if fetched.pending_task is not None:
+        await bot.send(BUSY_FALLBACK_NOTICE)
+        await bot.send(image)
+        schedule_refreshed_card_push(
+            bot,
+            fetched.pending_task,
+            build_recent_matches_card_from_snapshot,
+            feature_name="历史战绩",
+            player_id=player_id,
+        )
         return
     await bot.send(image)
 

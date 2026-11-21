@@ -148,8 +148,18 @@ def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[Match
     return "\n".join(lines)
 
 
-async def build_recent_matches_card(player_id: str) -> bytes:
-    snapshot, views = await _load_recent_matches_data(player_id)
+async def build_recent_matches_card_from_snapshot(snapshot: PlayerSnapshot) -> bytes:
+    """基于给定快照渲染最近历史战绩卡片。"""
+    player_id = snapshot.profile["player"]["id"]
+    matches = snapshot.profile["matches"]
+    if not matches:
+        raise DakanuError("历史战绩为空。\n发送 kq刷新数据 更新后再查看。")
+    views = await load_recent_match_views(player_id, matches, _RECENT_LIMIT)
     emit_ai_text(format_recent_matches_ai_summary(snapshot, views))
     assets = await _build_assets(snapshot, views)
     return await render_matches_card(snapshot.profile, views, assets)
+
+
+async def build_recent_matches_card(player_id: str) -> bytes:
+    snapshot = await ensure_player_snapshot(player_id)
+    return await build_recent_matches_card_from_snapshot(snapshot)

@@ -5,8 +5,16 @@ from gsuid_core.bot import Bot
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
-from .clan_services import build_clan_card, resolve_clan_target
+from .clan_services import (
+    build_clan_card,
+    build_clan_card_from_snapshot,
+    resolve_clan_target_with_refresh,
+)
 from ..utils.api.dakanu import DakanuError
+from ..utils.helper.refresh import (
+    BUSY_FALLBACK_NOTICE,
+    schedule_refreshed_card_push,
+)
 
 sv_clan = SV("卡拉彼丘战队")
 
@@ -25,10 +33,14 @@ sv_clan = SV("卡拉彼丘战队")
     aliases=["卡拉彼丘·查战队", "卡拉彼丘·战队信息"],
 )
 async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
-    clan, error = await resolve_clan_target(ev)
-    if error is not None or clan is None:
-        await bot.send(error or "未能解析目标战队。")
+    resolved = await resolve_clan_target_with_refresh(
+        ev,
+        allow_stale_fallback=type(bot).__name__ != "MockBot",
+    )
+    if resolved.error is not None or resolved.clan is None:
+        await bot.send(resolved.error or "未能解析目标战队。")
         return
+    clan = resolved.clan
 
     try:
         image = await build_clan_card(clan)
@@ -39,6 +51,18 @@ async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
     except RuntimeError:
         logger.exception(f"[卡拉彼丘·战队查询] 渲染战队 {clan['clanId']} 卡片失败")
         await bot.send("战队信息卡片生成失败，请稍后再试。")
+        return
+
+    if resolved.pending_task is not None and resolved.player_id is not None:
+        await bot.send(BUSY_FALLBACK_NOTICE)
+        await bot.send(image)
+        schedule_refreshed_card_push(
+            bot,
+            resolved.pending_task,
+            build_clan_card_from_snapshot,
+            feature_name="战队查询",
+            player_id=resolved.player_id,
+        )
         return
 
     await bot.send(image)
