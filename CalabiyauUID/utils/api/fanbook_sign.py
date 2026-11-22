@@ -19,6 +19,8 @@ _SIGN_REFERER = (
     "https://open.fanbook.cn/mp/138519745866498048/368331042878263296/sign/"
     "?enter_type=message_card&view=1&fb_redirect&open_type=mp"
 )
+_SHOP_API_BASE = "https://open.fanbook.cn/mp/138519745866498048/368331042878263296/credit-shop/api"
+_SHOP_REFERER = "https://open.fanbook.cn/mp/138519745866498048/368331042878263296/credit-shop/"
 _SIGN_APP_KEY = "z2cg4sg3vokll9pydc5d"
 _SIGN_APP_SECRET = "f8f8zvnzi87tuy27cweb"
 _NONCE_ALPHABET = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
@@ -27,8 +29,15 @@ CALABIYAU_SIGN_CHANNEL_ID = "408518973252960256"
 _QUERY_MAX_ATTEMPTS = 12
 _QUERY_RETRY_DELAY_S = 0.5
 _CODE_NOT_SIGNED_YET = 70000
+_SHOP_TOKEN_INVALID_CODES = (7, 401, 80007)
 _BEIJING_TZ = timezone(timedelta(hours=8))
 _LOG_TAG = "[卡拉彼丘·Fanbook签到]"
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+_shop_client_id: str = ""
+_shop_token_cache: dict[str, tuple[str, str]] = {}
 
 
 class FanbookSignError(RuntimeError):
@@ -62,28 +71,55 @@ def _generate_nonce(length: int = 20) -> str:
     return "".join(secrets.choice(_NONCE_ALPHABET) for _ in range(length))
 
 
-def _build_get_headers(params: dict[str, str]) -> dict[str, str]:
-    nonce = _generate_nonce()
-    timestamp_ms = str(int(time.time() * 1000))
-    query_suffix = "".join(f"&{key}={val}" for key, val in params.items())
-    raw = f"{_SIGN_APP_SECRET}&AppKey={_SIGN_APP_KEY}&Nonce={nonce}&Timestamp={timestamp_ms}{query_suffix}&{_SIGN_APP_SECRET}"
-    signature = hashlib.md5(raw.encode("utf-8")).hexdigest().lower()
-    return {
+def _build_common_headers(
+    *,
+    nonce: str,
+    timestamp_ms: str,
+    signature: str,
+    referer: str,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    headers = {
         "AppKey": _SIGN_APP_KEY,
         "Nonce": nonce,
         "Timestamp": timestamp_ms,
         "Signature": signature,
         "Content-Type": "application/json",
         "Origin": "https://open.fanbook.cn",
-        "Referer": _SIGN_REFERER,
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        ),
+        "Referer": referer,
+        "User-Agent": _USER_AGENT,
     }
+    if extra_headers is not None:
+        headers.update(extra_headers)
+    return headers
 
 
-def _build_post_headers_and_body(payload: dict[str, str]) -> tuple[dict[str, str], str]:
+def _build_get_headers(
+    params: dict[str, str],
+    *,
+    referer: str = _SIGN_REFERER,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    nonce = _generate_nonce()
+    timestamp_ms = str(int(time.time() * 1000))
+    query_suffix = "".join(f"&{key}={val}" for key, val in params.items())
+    raw = f"{_SIGN_APP_SECRET}&AppKey={_SIGN_APP_KEY}&Nonce={nonce}&Timestamp={timestamp_ms}{query_suffix}&{_SIGN_APP_SECRET}"
+    signature = hashlib.md5(raw.encode("utf-8")).hexdigest().lower()
+    return _build_common_headers(
+        nonce=nonce,
+        timestamp_ms=timestamp_ms,
+        signature=signature,
+        referer=referer,
+        extra_headers=extra_headers,
+    )
+
+
+def _build_post_headers_and_body(
+    payload: dict[str, str],
+    *,
+    referer: str = _SIGN_REFERER,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[dict[str, str], str]:
     nonce = _generate_nonce()
     timestamp_ms = str(int(time.time() * 1000))
     body_str = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
@@ -92,19 +128,13 @@ def _build_post_headers_and_body(payload: dict[str, str]) -> tuple[dict[str, str
         f"&Timestamp={timestamp_ms}&requestBody={body_str}&{_SIGN_APP_SECRET}"
     )
     signature = hashlib.md5(raw.encode("utf-8")).hexdigest().lower()
-    headers = {
-        "AppKey": _SIGN_APP_KEY,
-        "Nonce": nonce,
-        "Timestamp": timestamp_ms,
-        "Signature": signature,
-        "Content-Type": "application/json",
-        "Origin": "https://open.fanbook.cn",
-        "Referer": _SIGN_REFERER,
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        ),
-    }
+    headers = _build_common_headers(
+        nonce=nonce,
+        timestamp_ms=timestamp_ms,
+        signature=signature,
+        referer=referer,
+        extra_headers=extra_headers,
+    )
     return headers, body_str
 
 
@@ -130,6 +160,78 @@ def _read_str(payload: dict[str, object], key: str, default: str = "") -> str:
     return default
 
 
+def _parse_json_dict(response: httpx.Response, *, service_name: str, path: str) -> dict[str, object] | None:
+    try:
+        parsed: object = response.json()
+    except ValueError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    logger.warning(f"{_LOG_TAG} {service_name} {path} 响应非 JSON 对象")
+    return None
+
+
+async def _request_mp_api(
+    method: str,
+    path: str,
+    *,
+    base_url: str,
+    referer: str,
+    service_name: str,
+    params: dict[str, str] | None = None,
+    payload: dict[str, str] | None = None,
+    sign_token: str = "",
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, object]:
+    url = f"{base_url}{path}"
+    cookies = {"token": sign_token} if sign_token else None
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), cookies=cookies) as client:
+            if method == "GET":
+                query_params = params if params is not None else {}
+                headers = _build_get_headers(query_params, referer=referer, extra_headers=extra_headers)
+                response = await client.get(url, params=query_params, headers=headers)
+            else:
+                body_payload = payload if payload is not None else {}
+                headers, body_str = _build_post_headers_and_body(
+                    body_payload, referer=referer, extra_headers=extra_headers
+                )
+                response = await client.post(url, content=body_str.encode("utf-8"), headers=headers)
+    except httpx.HTTPError as exc:
+        logger.warning(f"{_LOG_TAG} 请求 {service_name} {path} 网络异常：{exc}")
+        raise FanbookSignError(f"{service_name}连接失败，请稍后重试。") from exc
+
+    parsed = _parse_json_dict(response, service_name=service_name, path=path)
+    if response.status_code == 401:
+        err_code = 401
+        err_msg = "Fanbook 登录凭证已过期，请重新 kq登录。"
+        if parsed is not None:
+            raw_code = parsed["code"] if "code" in parsed else None
+            if isinstance(raw_code, int) and not isinstance(raw_code, bool):
+                err_code = raw_code
+            raw_msg = parsed["msg"] if "msg" in parsed else None
+            if isinstance(raw_msg, str) and raw_msg:
+                err_msg = raw_msg
+        logger.warning(f"{_LOG_TAG} {service_name} {path} 鉴权失败（HTTP 401, code={err_code}）：{err_msg}")
+        raise FanbookSignError(err_msg, code=err_code)
+
+    if response.status_code >= 400:
+        logger.warning(f"{_LOG_TAG} 请求 {service_name} {path} 返回 HTTP {response.status_code}")
+        raise FanbookSignError(f"{service_name}接口异常（HTTP {response.status_code}）。", code=response.status_code)
+
+    if parsed is None:
+        raise FanbookSignError(f"{service_name}接口返回了无效数据。")
+
+    raw_code = parsed["code"] if "code" in parsed else None
+    code = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
+    raw_msg = parsed["msg"] if "msg" in parsed else None
+    msg = raw_msg if isinstance(raw_msg, str) and raw_msg else f"{service_name}请求失败"
+    if code != 0:
+        logger.warning(f"{_LOG_TAG} {service_name} {path} 业务返回 code={code} msg={msg}")
+        raise FanbookSignError(msg, code=code)
+    return parsed
+
+
 async def _request_sign_api(
     method: str,
     path: str,
@@ -138,43 +240,16 @@ async def _request_sign_api(
     payload: dict[str, str] | None = None,
     sign_token: str = "",
 ) -> dict[str, object]:
-    url = f"{_SIGN_API_BASE}{path}"
-    cookies = {"token": sign_token} if sign_token else None
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), cookies=cookies) as client:
-            if method == "GET":
-                query_params = params if params is not None else {}
-                headers = _build_get_headers(query_params)
-                response = await client.get(url, params=query_params, headers=headers)
-            else:
-                body_payload = payload if payload is not None else {}
-                headers, body_str = _build_post_headers_and_body(body_payload)
-                response = await client.post(url, content=body_str.encode("utf-8"), headers=headers)
-    except httpx.HTTPError as exc:
-        logger.warning(f"{_LOG_TAG} 请求 {path} 网络异常：{exc}")
-        raise FanbookSignError("Fanbook 签到服务连接失败，请稍后重试。") from exc
-
-    if response.status_code >= 400:
-        logger.warning(f"{_LOG_TAG} 请求 {path} 返回 HTTP {response.status_code}")
-        raise FanbookSignError(f"Fanbook 签到接口异常（HTTP {response.status_code}）。")
-
-    try:
-        parsed: object = response.json()
-    except ValueError as exc:
-        logger.warning(f"{_LOG_TAG} 解析 {path} JSON 失败：{exc}")
-        raise FanbookSignError("Fanbook 签到接口返回了无效数据。") from exc
-
-    if not isinstance(parsed, dict):
-        raise FanbookSignError("Fanbook 签到接口响应格式异常。")
-
-    raw_code = parsed["code"] if "code" in parsed else None
-    code = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
-    raw_msg = parsed["msg"] if "msg" in parsed else None
-    msg = raw_msg if isinstance(raw_msg, str) and raw_msg else "签到请求失败"
-    if code != 0:
-        logger.warning(f"{_LOG_TAG} 接口 {path} 业务返回 code={code} msg={msg}")
-        raise FanbookSignError(msg, code=code)
-    return parsed
+    return await _request_mp_api(
+        method,
+        path,
+        base_url=_SIGN_API_BASE,
+        referer=_SIGN_REFERER,
+        service_name="Fanbook 签到服务",
+        params=params,
+        payload=payload,
+        sign_token=sign_token,
+    )
 
 
 def _parse_sign_result(data_obj: object, *, already_signed: bool = False) -> FanbookSignResult | None:
@@ -294,3 +369,107 @@ async def perform_daily_sign(
         logger.debug(f"{_LOG_TAG} 第 {attempt}/{_QUERY_MAX_ATTEMPTS} 次查询签到结果仍在队列中")
 
     raise FanbookSignError("签到结果同步超时，请稍后再试。")
+
+
+async def _get_shop_client_id() -> str:
+    global _shop_client_id
+    if _shop_client_id:
+        return _shop_client_id
+
+    parsed = await _request_mp_api(
+        "GET",
+        "/core/v1/client",
+        base_url=_SHOP_API_BASE,
+        referer=_SHOP_REFERER,
+        service_name="Fanbook 积分商城",
+        params={"guild_id": CALABIYAU_GUILD_ID},
+    )
+    data_obj = parsed["data"] if "data" in parsed else None
+    if not isinstance(data_obj, dict):
+        raise FanbookSignError("Fanbook 积分商城 client 配置响应异常。")
+    client_id = _read_str(data_obj, "client_id")
+    if not client_id:
+        raise FanbookSignError("Fanbook 积分商城未返回有效的 client_id。")
+    _shop_client_id = client_id
+    return client_id
+
+
+async def _exchange_shop_token(*, fb_user_id: str, sign_token: str) -> str:
+    client_id = await _get_shop_client_id()
+    try:
+        parsed = await _request_mp_api(
+            "POST",
+            "/core/v2/user_token/login",
+            base_url=_SHOP_API_BASE,
+            referer=_SHOP_REFERER,
+            service_name="Fanbook 积分商城",
+            payload={"clientId": client_id, "userToken": sign_token},
+        )
+    except FanbookSignError as exc:
+        if exc.code in _SHOP_TOKEN_INVALID_CODES:
+            raise FanbookSignError("Fanbook 登录凭证已过期，请发送 kq登录 重新登录。", code=401) from exc
+        raise
+
+    data_obj = parsed["data"] if "data" in parsed else None
+    if not isinstance(data_obj, dict):
+        raise FanbookSignError("Fanbook 积分商城登录响应格式异常。")
+    shop_token = _read_str(data_obj, "token")
+    if not shop_token:
+        raise FanbookSignError("Fanbook 积分商城未返回有效的访问令牌。")
+    if fb_user_id:
+        _shop_token_cache[fb_user_id] = (sign_token, shop_token)
+    return shop_token
+
+
+def _get_cached_shop_token(*, fb_user_id: str, sign_token: str) -> str:
+    if not fb_user_id or fb_user_id not in _shop_token_cache:
+        return ""
+    cached_sign, cached_bearer = _shop_token_cache[fb_user_id]
+    if cached_sign == sign_token:
+        return cached_bearer
+    _shop_token_cache.pop(fb_user_id, None)
+    return ""
+
+
+async def _fetch_me_info(*, shop_token: str) -> dict[str, object]:
+    parsed = await _request_mp_api(
+        "GET",
+        "/common/v1/me/info",
+        base_url=_SHOP_API_BASE,
+        referer=_SHOP_REFERER,
+        service_name="Fanbook 积分商城",
+        extra_headers={"Authorization": f"Bearer {shop_token}"},
+    )
+    data_obj = parsed["data"] if "data" in parsed else None
+    if not isinstance(data_obj, dict):
+        raise FanbookSignError("Fanbook 积分商城用户信息格式异常。")
+    return data_obj
+
+
+async def query_shop_points(*, fb_user_id: str, sign_token: str) -> int:
+    """查询当前用户在卡拉彼丘 Fanbook 积分商城的总积分。"""
+    if not sign_token:
+        raise FanbookSignError("Fanbook 账号缺少登录凭证，请发送 kq登录 重新登录。")
+
+    shop_token = _get_cached_shop_token(fb_user_id=fb_user_id, sign_token=sign_token)
+    if not shop_token:
+        shop_token = await _exchange_shop_token(fb_user_id=fb_user_id, sign_token=sign_token)
+
+    try:
+        info_data = await _fetch_me_info(shop_token=shop_token)
+    except FanbookSignError as exc:
+        if exc.code not in _SHOP_TOKEN_INVALID_CODES:
+            raise
+        if fb_user_id:
+            _shop_token_cache.pop(fb_user_id, None)
+        shop_token = await _exchange_shop_token(fb_user_id=fb_user_id, sign_token=sign_token)
+        info_data = await _fetch_me_info(shop_token=shop_token)
+
+    if "point" not in info_data:
+        raise FanbookSignError("Fanbook 积分商城未返回积分字段。")
+    raw_point = info_data["point"]
+    if isinstance(raw_point, int) and not isinstance(raw_point, bool):
+        return raw_point
+    if isinstance(raw_point, str) and raw_point.isdigit():
+        return int(raw_point)
+    raise FanbookSignError("Fanbook 积分商城返回的积分数值格式异常。")

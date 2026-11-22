@@ -96,6 +96,15 @@
                 "need_ck": false,
                 "need_sk": false,
                 "need_admin": true
+            },
+            {
+                "name": "积分",
+                "desc": "查询当前已登录 Fanbook 账号的卡丘社区总积分",
+                "eg": "积分",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
             }
         ]
     },

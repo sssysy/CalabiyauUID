@@ -10,6 +10,7 @@ from .sign_services import (
     parse_sign_time,
     enable_auto_sign,
     disable_auto_sign,
+    query_fanbook_points,
     run_all_fanbook_sign,
     run_manual_fanbook_sign,
     run_scheduled_fanbook_sign,
@@ -27,6 +28,14 @@ async def calabiyau_fanbook_sign(bot: Bot, ev: Event) -> None:
     if type(bot).__name__ != "MockBot":
         await bot.send("[卡丘] 开始签到任务，请稍后......", at_sender=bool(ev.group_id))
     reply = await run_manual_fanbook_sign(ev.bot_id, ev.user_id)
+    await bot.send(reply, at_sender=bool(ev.group_id))
+
+
+@sv_fanbook_sign.on_fullmatch("积分", block=True)
+async def calabiyau_fanbook_points(bot: Bot, ev: Event) -> None:
+    reply = await query_fanbook_points(ev.bot_id, ev.user_id)
+    if ev.group_id:
+        reply = f"\n{reply}"
     await bot.send(reply, at_sender=bool(ev.group_id))
 
 

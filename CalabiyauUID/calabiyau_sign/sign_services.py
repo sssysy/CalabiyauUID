@@ -20,6 +20,7 @@ from ..utils.api.fanbook_sign import (
     FanbookSignError,
     FanbookSignResult,
     beijing_today_str,
+    query_shop_points,
     perform_daily_sign,
 )
 from ..utils.database.model_fanbook import CalabiyauFanbookUser
@@ -167,6 +168,23 @@ def _is_account_expired(account: CalabiyauFanbookUser, now_ts: int) -> bool:
     return account.expire_at_ts > 0 and account.expire_at_ts <= now_ts
 
 
+async def _get_active_fanbook_account(
+    bot_id: str,
+    user_id: str,
+    *,
+    header: str,
+) -> tuple[CalabiyauFanbookUser | None, str]:
+    account = await CalabiyauFanbookUser.get_account(bot_id, user_id)
+    if account is None or not account.sign:
+        return None, f"{header}\n⚠️ 尚未登录 Fanbook\n请先发送 kq登录 完成登录。"
+    if _is_account_expired(account, int(time.time())):
+        return (
+            None,
+            f"{header}\n⚠️ Fanbook 登录凭证已过期\n账号：{_format_account_name(account)}\n请发送 kq登录 重新登录。",
+        )
+    return account, ""
+
+
 async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: str) -> UserSignReport:
     try:
         result = await perform_daily_sign(
@@ -214,33 +232,44 @@ async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: st
 
 async def run_manual_fanbook_sign(bot_id: str, user_id: str) -> str:
     """执行单用户的手动 Fanbook 签到并返回展示文案。"""
-    account = await CalabiyauFanbookUser.get_account(bot_id, user_id)
-    if account is None or not account.sign:
-        return "[卡拉彼丘社区签到]\n⚠️ 尚未登录 Fanbook\n请先发送 kq登录 完成登录。"
-    if _is_account_expired(account, int(time.time())):
-        return (
-            "[卡拉彼丘社区签到]\n"
-            "⚠️ Fanbook 登录凭证已过期\n"
-            f"账号：{_format_account_name(account)}\n"
-            "请发送 kq登录 重新登录。"
-        )
+    account, error_reply = await _get_active_fanbook_account(bot_id, user_id, header="[卡拉彼丘社区签到]")
+    if account is None:
+        return error_reply
 
     report = await _execute_sign_for_account(account, beijing_today_str())
     return report.text
 
 
+async def query_fanbook_points(bot_id: str, user_id: str) -> str:
+    """查询当前用户的卡拉彼丘 Fanbook 社区总积分。"""
+    header = "[卡丘社区积分]"
+    account, error_reply = await _get_active_fanbook_account(bot_id, user_id, header=header)
+    if account is None:
+        return error_reply
+
+    account_name = _format_account_name(account)
+    try:
+        points = await query_shop_points(
+            fb_user_id=account.fb_user_id,
+            sign_token=account.sign,
+        )
+    except FanbookSignError as exc:
+        return f"{header}\n❌ 查询失败！\n账号：{account_name}\n原因：{exc}"
+
+    return "\n".join(
+        [
+            header,
+            f"账号：{account_name}",
+            f"总积分：{points}",
+        ]
+    )
+
+
 async def enable_auto_sign(ev: Event) -> str:
     """开启当前用户的 Fanbook 自动签到并绑定当前会话推送。"""
-    account = await CalabiyauFanbookUser.get_account(ev.bot_id, ev.user_id)
-    if account is None or not account.sign:
-        return "[卡拉彼丘社区签到]\n⚠️ 尚未登录 Fanbook\n请先发送 kq登录 完成登录。"
-    if _is_account_expired(account, int(time.time())):
-        return (
-            "[卡拉彼丘社区签到]\n"
-            "⚠️ Fanbook 登录凭证已过期\n"
-            f"账号：{_format_account_name(account)}\n"
-            "请发送 kq登录 重新登录。"
-        )
+    account, error_reply = await _get_active_fanbook_account(ev.bot_id, ev.user_id, header="[卡拉彼丘社区签到]")
+    if account is None:
+        return error_reply
 
     await CalabiyauFanbookSign.set_auto_sign(ev.bot_id, ev.user_id, enabled=True)
     if not await is_user_subscribed_for_task(SIGN_SUBSCRIBE_TASK_NAME, ev):
