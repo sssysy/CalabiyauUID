@@ -171,6 +171,15 @@
         "desc": "玩家活跃趋势与世界频道动态",
         "data": [
             {
+                "name": "抽表情",
+                "desc": "随机发送卡拉彼丘表情包，可附带角色名或别名",
+                "eg": "抽表情 星绘",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "活动",
                 "desc": "查看当前进行中的活动时间轴",
                 "eg": "活动",
