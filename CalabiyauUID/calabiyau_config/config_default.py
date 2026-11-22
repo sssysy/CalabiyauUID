@@ -1,4 +1,12 @@
-from gsuid_core.utils.plugins_config.models import GSC, GsIntConfig, GsStrConfig, GsBoolConfig, GsImageConfig
+from gsuid_core.utils.plugins_config.models import (
+    GSC,
+    GsIntConfig,
+    GsStrConfig,
+    GsBoolConfig,
+    GsImageConfig,
+    GsTimeRConfig,
+    GsListStrConfig,
+)
 
 from ..utils.utils.paths import DATA_DIR, CUSTOM_BG_PATH
 
@@ -17,29 +25,44 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "png",
     ),
     "FanbookLoginUrl": GsStrConfig(
-        "Fanbook登录页面URL",
-        "登录页对外访问地址（可含协议与端口），留空则使用 Core 的 HOST/PORT 并自动探测公网 IP",
+        "卡丘 Fanbook 登录页面URL",
+        "登录页对外访问地址，留空自动探测",
         "",
     ),
-    "FanbookLoginTTL": GsIntConfig(
-        "Fanbook登录会话存活秒数",
-        "发送登录链接后多久内需完成登录（秒），超时后清理会话，最大 3600",
-        600,
-        max_value=3600,
+    "FanbookSignDaily": GsBoolConfig(
+        "开启Fanbook每日自动签到",
+        "定时自动签到总开关，关闭后不会执行每日定时签到任务",
+        True,
     ),
-    "FanbookQRLogin": GsBoolConfig(
-        "Fanbook登录链接转二维码",
-        "开启后把 Fanbook 登录页面链接生成二维码图片发送",
+    "FanbookSignAll": GsBoolConfig(
+        "定时签全员",
+        "开启后定时任务会对所有已登录Fanbook的账号签到",
         False,
     ),
-    "FanbookTencentWord": GsBoolConfig(
-        "Fanbook登录链接用腾讯文档包装",
-        "开启后将登录链接包装为 docs.qq.com 跳转链接，减少聊天平台拦截",
-        False,
+    "FanbookSignTime": GsTimeRConfig(
+        "Fanbook每日签到时间",
+        "每天自动签到时间（时, 分），修改后重启生效",
+        (8, 0),
     ),
-    "FanbookLoginForward": GsBoolConfig(
-        "Fanbook登录消息使用合并转发",
-        "开启后在支持的聊天平台通过合并转发发送登录链接",
-        False,
+    "FanbookSignDelayRange": GsListStrConfig(
+        "签到延迟",
+        "定时签到随机延迟区间（秒），依次填写最小和最大延迟",
+        ["5", "10"],
+    ),
+    "FanbookSignConcurrency": GsIntConfig(
+        "自动签到并发数",
+        "每日定时签到最大并发账号数，最大 20",
+        3,
+        max_value=20,
+    ),
+    "FanbookSignPushGroup": GsBoolConfig(
+        "自动签到群聊推送",
+        "在群聊内开启自动签到时，每日签到完成后向对应群推送汇总消息",
+        True,
+    ),
+    "FanbookSignPushPrivate": GsBoolConfig(
+        "自动签到私聊推送",
+        "在私聊内开启自动签到时，每日签到完成后向对应私聊推送详细结果",
+        True,
     ),
 }

@@ -7,42 +7,65 @@
     <script src="https://turing.captcha.qcloud.com/TCaptcha.js"></script>
     <style>
       :root {
-        --bg: #eef2f7;
-        --card: #ffffff;
-        --surface: #f5f7fb;
-        --text: #182230;
-        --muted: #5f6c80;
-        --accent: #198cfe;
-        --accent-hover: #0e78e3;
-        --ok-bg: #eaf8ef;
-        --ok-text: #157347;
-        --err-bg: #fdecec;
-        --err-text: #b42318;
-        --border: #dce3ee;
+        color-scheme: dark;
+        --bg: #0b111c;
+        --card: rgba(15, 23, 42, 0.68);
+        --surface: rgba(255, 255, 255, 0.08);
+        --text: rgba(255, 255, 255, 0.96);
+        --muted: rgba(226, 232, 240, 0.72);
+        --accent: #38a3ff;
+        --accent-hover: #1e90ff;
+        --ok-bg: rgba(22, 163, 74, 0.22);
+        --ok-text: #86efac;
+        --err-bg: rgba(220, 38, 38, 0.24);
+        --err-text: #fca5a5;
+        --border: rgba(255, 255, 255, 0.18);
         --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
-      main { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
-      .card {
-        width: min(420px, 100%);
-        background: var(--card);
-        border-radius: 12px;
-        padding: 28px 24px;
-        box-shadow: 0 8px 28px rgba(24, 34, 48, 0.08);
+      .stage {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+        background: #0b111c url("https://klbq.idreamsky.com/img/background/bg.jpg") center / cover no-repeat;
       }
-      .title { margin: 0 0 6px; font-size: 22px; font-weight: 700; }
-      .subtitle { margin: 0 0 20px; font-size: 13px; color: var(--muted); line-height: 1.5; }
-      .user-chip {
-        background: var(--surface);
-        border-radius: 8px;
-        padding: 10px 12px;
-        font-size: 13px;
+      .stage video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: brightness(0.48) saturate(1.06);
+      }
+      .stage-mask {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(8, 13, 24, 0.25), rgba(8, 13, 24, 0.56));
+      }
+      main { position: relative; z-index: 1; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+      .card {
+        width: min(440px, 100%);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px 24px;
+        backdrop-filter: blur(18px) saturate(135%);
+        -webkit-backdrop-filter: blur(18px) saturate(135%);
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
+      }
+      .title { margin: 0 0 20px; font-size: 22px; font-weight: 700; }
+      .verify-code {
+        margin: 14px 0 0;
+        font-size: 12px;
         color: var(--muted);
-        margin-bottom: 18px;
+        line-height: 1.5;
+        text-align: center;
         word-break: break-all;
       }
-      .user-chip strong { color: var(--text); }
+      .verify-code strong {
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
       .field { margin-bottom: 14px; }
       label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text); }
       .phone-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; }
@@ -56,14 +79,16 @@
       }
       input, select {
         border: 1px solid var(--border);
-        background: #fff;
+        background: var(--surface);
         color: var(--text);
         padding: 0 12px;
       }
+      input::placeholder { color: rgba(226, 232, 240, 0.62); }
+      select option { color: #111827; background: #ffffff; }
       input:focus, select:focus {
         outline: none;
         border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(25, 140, 254, 0.14);
+        box-shadow: 0 0 0 3px rgba(56, 163, 255, 0.22);
       }
       button {
         border: 0;
@@ -74,10 +99,10 @@
       button:disabled { opacity: 0.48; cursor: not-allowed; }
       .btn-secondary {
         background: var(--surface);
-        color: var(--accent);
+        color: #93c5fd;
         border: 1px solid var(--border);
       }
-      .btn-secondary:hover:not(:disabled) { background: #eaf2fd; }
+      .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
       .btn-primary {
         margin-top: 6px;
         background: var(--accent);
@@ -92,11 +117,12 @@
         line-height: 1.5;
         display: none;
       }
-      .status.ok { display: block; background: var(--ok-bg); color: var(--ok-text); }
-      .status.err { display: block; background: var(--err-bg); color: var(--err-text); }
+      .status.ok { display: block; background: var(--ok-bg); color: var(--ok-text); border: 1px solid rgba(134, 239, 172, 0.28); }
+      .status.err { display: block; background: var(--err-bg); color: var(--err-text); border: 1px solid rgba(252, 165, 165, 0.28); }
       .done-box {
         background: var(--ok-bg);
         color: var(--ok-text);
+        border: 1px solid rgba(134, 239, 172, 0.28);
         border-radius: 8px;
         padding: 16px;
         font-size: 14px;
@@ -105,27 +131,37 @@
       .expired-box {
         background: var(--err-bg);
         color: var(--err-text);
+        border: 1px solid rgba(252, 165, 165, 0.28);
         border-radius: 8px;
         padding: 16px;
         font-size: 14px;
         line-height: 1.6;
       }
-      .hint { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.5; }
     </style>
   </head>
   <body>
+    <div class="stage" aria-hidden="true">
+      <video
+        id="bgVideo"
+        autoplay
+        muted
+        loop
+        playsinline
+        poster="https://klbq.idreamsky.com/img/background/bg.jpg"
+      >
+        <source src="https://klbq-website-cdn.idreamsky.com/fat/static/static_resources/video.mp4" type="video/mp4" />
+      </video>
+      <div class="stage-mask"></div>
+    </div>
     <main>
       <section class="card">
         <h1 class="title">Fanbook 账号登录</h1>
-        <p class="subtitle">使用手机号与腾讯安全滑块验证登录 Fanbook，凭据仅保存在当前插件本地。</p>
 
         {% if not valid %}
         <div class="expired-box">当前登录链接已失效或已超时，请在聊天中重新发送 <strong>kq登录</strong> 获取新链接。</div>
         {% elif done %}
         <div class="done-box">Fanbook 登录已完成，可以关闭此页面返回聊天窗口。</div>
         {% else %}
-        <div class="user-chip">关联会话 ID：<strong>{{ user_id }}</strong></div>
-
         <form id="loginForm" autocomplete="off">
           <div class="field">
             <label for="mobile">手机号</label>
@@ -154,11 +190,12 @@
           <button id="submitBtn" type="submit" class="btn-primary" disabled>登录 Fanbook</button>
         </form>
 
+        <p class="verify-code">校验码：<strong>{{ user_id }}</strong></p>
+
         <div id="statusBox" class="status" role="status" aria-live="polite"></div>
         <div id="donePanel" class="done-box" style="display: none; margin-top: 14px;">
           Fanbook 登录成功！可以关闭此页面，回到聊天发送 <strong>kq查看</strong> 确认状态。
         </div>
-        <p class="hint">点击“获取验证码”后会弹出腾讯安全滑块；如未弹出，请检查浏览器是否拦截了外部脚本。</p>
         {% endif %}
       </section>
     </main>

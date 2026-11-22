@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>[卡丘] 自动签到</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 100%;
+  min-height: 1px;
+  background: #1e293b;
+  color: #0f172a;
+  font-family: "MiSans", "Microsoft YaHei", sans-serif;
+  font-size: 24px;
+}
+.wrap {
+  width: 100%;
+  padding: 24px;
+  background-color: #1e293b;
+  {% if data.bg_uri %}
+  background-image: url("{{ data.bg_uri }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  {% endif %}
+}
+.card {
+  width: 100%;
+  background: rgba(255, 255, 255, .62);
+  backdrop-filter: blur(18px);
+  border-radius: 14px;
+  padding: 32px 38px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+.card-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+.date-text {
+  flex: none;
+  font-size: 24px;
+  font-weight: 600;
+  color: #334155;
+  font-family: "Mono", Consolas, monospace;
+}
+.status-line {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+}
+.count-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.count-line {
+  font-size: 26px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+.num {
+  font-family: "Mono", Consolas, monospace;
+  font-weight: 700;
+}
+.num-ok {
+  color: #15803d;
+}
+.num-fail {
+  color: #b91c1c;
+}
+.num-muted {
+  color: #475569;
+}
+.fail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+.fail-item {
+  font-size: 22px;
+  color: #991b1b;
+  line-height: 1.45;
+  word-break: break-all;
+}
+.footer {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 16px;
+  color: rgba(241, 245, 249, .94);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .68);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <div class="card-title">[卡丘] 自动签到</div>
+      <div class="date-text">{{ data.sign_date }}</div>
+    </div>
+    <div class="status-line">今日签到任务已完成！</div>
+    <div class="count-col">
+      <div class="count-line">签到成功：<span class="num num-ok">{{ data.success_count }}</span> 人</div>
+      <div class="count-line">签到失败：<span class="num {{ 'num-fail' if data.failed_count > 0 else 'num-muted' }}">{{ data.failed_count }}</span> 人</div>
+    </div>
+    {% if data.failures %}
+    <div class="fail-list">
+      {% for item in data.failures %}
+      <div class="fail-item">- {{ item.label }}: {{ item.reason }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="footer">{{ data.footer_text }}</div>
+</div>
+</body>
+</html>

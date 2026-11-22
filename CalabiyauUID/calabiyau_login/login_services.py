@@ -7,7 +7,6 @@ import uuid
 import asyncio
 import secrets
 from typing import Literal
-from pathlib import Path
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -20,7 +19,6 @@ from gsuid_core.config import core_config
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
-from gsuid_core.utils.cookie_manager.qrlogin import get_qrcode_base64
 
 from ..calabiyau_config import CalabiyauConfig
 from ..utils.api.fanbook import (
@@ -31,13 +29,10 @@ from ..utils.api.fanbook import (
     login_by_mobile,
     fetch_captcha_app_id,
 )
-from ..utils.utils.paths import CACHE_DIR
 from ..utils.database.model_fanbook import CalabiyauFanbookUser
 
 _LOG_TAG = "[卡拉彼丘·Fanbook登录]"
-_DEFAULT_LOGIN_TTL_S = 600
-_MIN_LOGIN_TTL_S = 60
-_MAX_LOGIN_TTL_S = 3600
+_DEFAULT_LOGIN_TTL_S = 300
 _POLL_INTERVAL_S = 1.5
 _MAX_CACHE_SIZE = 64
 _REFRESH_THRESHOLD_S = 15 * 24 * 3600
@@ -121,21 +116,9 @@ class TimedLoginCache:
 LOGIN_CACHE = TimedLoginCache()
 
 
-def _get_bool_config(key: str) -> bool:
-    value: object = CalabiyauConfig.get_config(key).data
-    return value is True
-
-
 def _get_str_config(key: str) -> str:
     value: object = CalabiyauConfig.get_config(key).data
     return value.strip() if isinstance(value, str) else ""
-
-
-def get_login_ttl_seconds() -> int:
-    value: object = CalabiyauConfig.get_config("FanbookLoginTTL").data
-    if isinstance(value, int) and not isinstance(value, bool):
-        return max(_MIN_LOGIN_TTL_S, min(_MAX_LOGIN_TTL_S, value))
-    return _DEFAULT_LOGIN_TTL_S
 
 
 async def _get_public_ip(fallback_host: str) -> str:
@@ -196,44 +179,15 @@ async def _send_text(bot: Bot, ev: Event, message: str) -> None:
 
 async def _send_login_prompt(bot: Bot, ev: Event, url: str, ttl_seconds: int) -> None:
     at_sender = bool(ev.group_id)
-    use_forward = _get_bool_config("FanbookLoginForward")
     ttl_minutes = max(1, ttl_seconds // 60)
-
-    if _get_bool_config("FanbookQRLogin"):
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        qr_path: Path = CACHE_DIR / f"fb_login_{secrets.token_hex(6)}.png"
-        try:
-            qr_bytes = await get_qrcode_base64(url, qr_path, ev.bot_id)
-            segments = [
-                MessageSegment.text(f"[卡拉彼丘] 请在 {ttl_minutes} 分钟内扫描二维码打开 Fanbook 登录页：\n"),
-                MessageSegment.image(qr_bytes),
-            ]
-            if use_forward:
-                if not ev.group_id and ev.bot_id == "onebot":
-                    await bot.send(segments)
-                else:
-                    await bot.send(MessageSegment.node(segments))
-            else:
-                await bot.send(segments, at_sender=at_sender)
-        finally:
-            qr_path.unlink(missing_ok=True)
-        return
-
-    target_url = f"https://docs.qq.com/scenario/link.html?url={url}" if _get_bool_config("FanbookTencentWord") else url
     lines = [
-        f"[卡拉彼丘] 您的会话 ID 为【{ev.user_id}】",
-        "请在浏览器打开下方链接完成 Fanbook 短信与滑块登录：",
-        f" {target_url}" if use_forward else target_url,
+        "[卡拉彼丘 Fanbook 社区登录]",
+        f"登录链接：{url}",
+        f"校验码：{ev.user_id}",
         f"链接 {ttl_minutes} 分钟内有效。",
+        "【登录前请核对校验码正确无误！】",
     ]
-    content = "\n".join(lines)
-    if use_forward:
-        if not ev.group_id and ev.bot_id == "onebot":
-            await bot.send(content)
-        else:
-            await bot.send(MessageSegment.node(lines))
-        return
-    await bot.send(content, at_sender=at_sender)
+    await bot.send("\n".join(lines), at_sender=at_sender)
 
 
 async def send_fanbook_sms(
@@ -326,7 +280,7 @@ async def _wait_for_login(
 async def request_fanbook_login(bot: Bot, ev: Event) -> None:
     """发起 Fanbook 网页滑块短信登录流程并等待完成。"""
     LOGIN_CACHE.evict_user(ev.bot_id, ev.user_id)
-    ttl_seconds = get_login_ttl_seconds()
+    ttl_seconds = _DEFAULT_LOGIN_TTL_S
     auth_token = secrets.token_urlsafe(16)
     device_id = str(uuid.uuid4())
     captcha_app_id = await fetch_captcha_app_id(device_id)
@@ -361,10 +315,11 @@ async def request_fanbook_login(bot: Bot, ev: Event) -> None:
         device_id=session.device_id,
         expire_at_ts=session.expire_at_ts,
     )
-    display_id = session.fb_short_id if session.fb_short_id else session.fb_user_id
-    identity = f"{session.nickname}（ID: {display_id}）" if session.nickname else f"ID: {display_id}"
+    display_name = (
+        session.nickname if session.nickname else (session.fb_short_id if session.fb_short_id else session.fb_user_id)
+    )
     logger.info(f"{_LOG_TAG} 登录落库成功 user_id={ev.user_id} fb_user_id={session.fb_user_id}")
-    await _send_text(bot, ev, f"Fanbook 登录成功：{identity}\n可发送 kq查看 确认账号状态。")
+    await _send_text(bot, ev, f"Fanbook 登录成功：{display_name}")
 
 
 async def logout_fanbook(bot: Bot, ev: Event) -> None:

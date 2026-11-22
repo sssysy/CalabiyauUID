@@ -22,7 +22,7 @@
             },
             {
                 "name": "查看绑定",
-                "desc": "查看当前已绑定的卡拉彼丘账号",
+                "desc": "查看已绑定的卡拉彼丘账号与 Fanbook 登录状态",
                 "eg": "查看",
                 "highlight": 0,
                 "need_ck": false,
@@ -37,6 +37,65 @@
                 "need_ck": false,
                 "need_sk": false,
                 "need_admin": false
+            }
+        ]
+    },
+    "卡丘社区功能": {
+        "desc": "Fanbook 社区账号登录与每日自动签到",
+        "data": [
+            {
+                "name": "登录",
+                "desc": "通过网页短信与安全滑块登录 Fanbook",
+                "eg": "登录",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "登出",
+                "desc": "退出当前 Fanbook 登录并清除本地凭证（别名：退出）",
+                "eg": "登出",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "签到",
+                "desc": "手动执行一次 Fanbook 卡拉彼丘社区每日签到",
+                "eg": "签到",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "开启自动签到",
+                "desc": "开启每日自动签到并订阅结果推送",
+                "eg": "开启自动签到",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "关闭自动签到",
+                "desc": "关闭每日自动签到并取消结果推送",
+                "eg": "关闭自动签到",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "全部签到",
+                "desc": "手动执行一次全部已登录账号的 Fanbook 签到",
+                "eg": "全部签到",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": true
             }
         ]
     },
