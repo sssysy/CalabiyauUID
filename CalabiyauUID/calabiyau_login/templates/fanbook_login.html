@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>卡拉彼丘 · Fanbook 登录</title>
+    <script src="https://turing.captcha.qcloud.com/TCaptcha.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b111c;
+        --card: rgba(15, 23, 42, 0.68);
+        --surface: rgba(255, 255, 255, 0.08);
+        --text: rgba(255, 255, 255, 0.96);
+        --muted: rgba(226, 232, 240, 0.72);
+        --accent: #38a3ff;
+        --accent-hover: #1e90ff;
+        --ok-bg: rgba(22, 163, 74, 0.22);
+        --ok-text: #86efac;
+        --err-bg: rgba(220, 38, 38, 0.24);
+        --err-text: #fca5a5;
+        --border: rgba(255, 255, 255, 0.18);
+        --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+      .stage {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+        background: #0b111c url("https://klbq.idreamsky.com/img/background/bg.jpg") center / cover no-repeat;
+      }
+      .stage video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: brightness(0.48) saturate(1.06);
+      }
+      .stage-mask {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(8, 13, 24, 0.25), rgba(8, 13, 24, 0.56));
+      }
+      main { position: relative; z-index: 1; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+      .card {
+        width: min(440px, 100%);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px 24px;
+        backdrop-filter: blur(18px) saturate(135%);
+        -webkit-backdrop-filter: blur(18px) saturate(135%);
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
+      }
+      .title { margin: 0 0 20px; font-size: 22px; font-weight: 700; }
+      .verify-code {
+        margin: 14px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        text-align: center;
+        word-break: break-all;
+      }
+      .verify-code strong {
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .field { margin-bottom: 14px; }
+      label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text); }
+      .phone-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; }
+      .code-row { display: grid; grid-template-columns: minmax(0, 1fr) 124px; gap: 8px; }
+      input, select, button {
+        width: 100%;
+        height: 42px;
+        border-radius: 8px;
+        font: inherit;
+        font-size: 14px;
+      }
+      input, select {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        padding: 0 12px;
+      }
+      input::placeholder { color: rgba(226, 232, 240, 0.62); }
+      select option { color: #111827; background: #ffffff; }
+      input:focus, select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(56, 163, 255, 0.22);
+      }
+      button {
+        border: 0;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background-color 0.15s ease, opacity 0.15s ease;
+      }
+      button:disabled { opacity: 0.48; cursor: not-allowed; }
+      .btn-secondary {
+        background: var(--surface);
+        color: #93c5fd;
+        border: 1px solid var(--border);
+      }
+      .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+      .btn-primary {
+        margin-top: 6px;
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+      .status {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        display: none;
+      }
+      .status.ok { display: block; background: var(--ok-bg); color: var(--ok-text); border: 1px solid rgba(134, 239, 172, 0.28); }
+      .status.err { display: block; background: var(--err-bg); color: var(--err-text); border: 1px solid rgba(252, 165, 165, 0.28); }
+      .done-box {
+        background: var(--ok-bg);
+        color: var(--ok-text);
+        border: 1px solid rgba(134, 239, 172, 0.28);
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .expired-box {
+        background: var(--err-bg);
+        color: var(--err-text);
+        border: 1px solid rgba(252, 165, 165, 0.28);
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" aria-hidden="true">
+      <video
+        id="bgVideo"
+        autoplay
+        muted
+        loop
+        playsinline
+        poster="https://klbq.idreamsky.com/img/background/bg.jpg"
+      >
+        <source src="https://klbq-website-cdn.idreamsky.com/fat/static/static_resources/video.mp4" type="video/mp4" />
+      </video>
+      <div class="stage-mask"></div>
+    </div>
+    <main>
+      <section class="card">
+        <h1 class="title">Fanbook 账号登录</h1>
+
+        {% if not valid %}
+        <div class="expired-box">当前登录链接已失效或已超时，请在聊天中重新发送 <strong>kq登录</strong> 获取新链接。</div>
+        {% elif done %}
+        <div class="done-box">Fanbook 登录已完成，可以关闭此页面返回聊天窗口。</div>
+        {% else %}
+        <form id="loginForm" autocomplete="off">
+          <div class="field">
+            <label for="mobile">手机号</label>
+            <div class="phone-row">
+              <select id="areaCode" aria-label="国家或地区区号">
+                <option value="86" selected>中国 +86</option>
+                <option value="852">香港 +852</option>
+                <option value="853">澳门 +853</option>
+                <option value="886">台湾 +886</option>
+                <option value="1">北美 +1</option>
+                <option value="81">日本 +81</option>
+                <option value="82">韩国 +82</option>
+              </select>
+              <input id="mobile" type="tel" inputmode="numeric" placeholder="请输入手机号" maxlength="20" required />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="smsCode">短信验证码</label>
+            <div class="code-row">
+              <input id="smsCode" type="text" inputmode="numeric" placeholder="请输入 6 位验证码" maxlength="8" required />
+              <button id="sendBtn" type="button" class="btn-secondary" disabled>获取验证码</button>
+            </div>
+          </div>
+
+          <button id="submitBtn" type="submit" class="btn-primary" disabled>登录 Fanbook</button>
+        </form>
+
+        <p class="verify-code">校验码：<strong>{{ user_id }}</strong></p>
+
+        <div id="statusBox" class="status" role="status" aria-live="polite"></div>
+        <div id="donePanel" class="done-box" style="display: none; margin-top: 14px;">
+          Fanbook 登录成功！可以关闭此页面，回到聊天发送 <strong>kq查看</strong> 确认状态。
+        </div>
+        {% endif %}
+      </section>
+    </main>
+
+    {% if valid and not done %}
+    <script>
+      (function () {
+        const AUTH = {{ auth | tojson }};
+        const CAPTCHA_APP_ID = {{ captcha_app_id | tojson }};
+        const areaCodeEl = document.getElementById("areaCode");
+        const mobileEl = document.getElementById("mobile");
+        const smsCodeEl = document.getElementById("smsCode");
+        const sendBtn = document.getElementById("sendBtn");
+        const submitBtn = document.getElementById("submitBtn");
+        const formEl = document.getElementById("loginForm");
+        const statusBox = document.getElementById("statusBox");
+        const donePanel = document.getElementById("donePanel");
+
+        let cooldownTimer = null;
+        let cooldownLeft = 0;
+        let sendingSms = false;
+        let submitting = false;
+
+        function setStatus(message, ok) {
+          if (!message) {
+            statusBox.style.display = "none";
+            statusBox.className = "status";
+            statusBox.textContent = "";
+            return;
+          }
+          statusBox.textContent = message;
+          statusBox.className = ok ? "status ok" : "status err";
+          statusBox.style.display = "block";
+        }
+
+        function isPhoneValid() {
+          const val = mobileEl.value.trim();
+          if (areaCodeEl.value === "86") {
+            return /^1\d{10}$/.test(val);
+          }
+          return /^\d{5,15}$/.test(val);
+        }
+
+        function refreshButtons() {
+          const phoneOk = isPhoneValid();
+          sendBtn.disabled = sendingSms || cooldownLeft > 0 || !phoneOk;
+          submitBtn.disabled = submitting || !phoneOk || smsCodeEl.value.trim().length < 4;
+        }
+
+        function startCooldown(seconds) {
+          clearInterval(cooldownTimer);
+          cooldownLeft = seconds;
+          sendBtn.textContent = cooldownLeft + "s 后重试";
+          refreshButtons();
+          cooldownTimer = setInterval(function () {
+            cooldownLeft -= 1;
+            if (cooldownLeft <= 0) {
+              clearInterval(cooldownTimer);
+              cooldownLeft = 0;
+              sendBtn.textContent = "获取验证码";
+            } else {
+              sendBtn.textContent = cooldownLeft + "s 后重试";
+            }
+            refreshButtons();
+          }, 1000);
+        }
+
+        async function postJson(url, payload) {
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          return await resp.json();
+        }
+
+        async function requestSms(ticket, randstr) {
+          sendingSms = true;
+          sendBtn.textContent = "发送中…";
+          refreshButtons();
+          try {
+            const res = await postJson("/kq/fanbook/sendSmsCode", {
+              auth: AUTH,
+              areaCode: areaCodeEl.value,
+              mobile: mobileEl.value.trim(),
+              ticket: ticket,
+              randstr: randstr,
+            });
+            if (res.ok) {
+              setStatus(res.msg || "短信验证码已发送，请注意查收。", true);
+              startCooldown(60);
+              return;
+            }
+            setStatus(res.msg || "发送验证码失败，请稍后重试。", false);
+          } catch (err) {
+            setStatus("请求发送验证码失败，请检查网络连接。", false);
+          } finally {
+            sendingSms = false;
+            if (cooldownLeft <= 0) {
+              sendBtn.textContent = "获取验证码";
+            }
+            refreshButtons();
+          }
+        }
+
+        areaCodeEl.addEventListener("change", refreshButtons);
+        mobileEl.addEventListener("input", refreshButtons);
+        smsCodeEl.addEventListener("input", refreshButtons);
+
+        sendBtn.addEventListener("click", function () {
+          if (!isPhoneValid()) {
+            setStatus("请先输入有效的手机号。", false);
+            return;
+          }
+          if (typeof window.TencentCaptcha !== "function") {
+            setStatus("腾讯安全验证脚本未加载完成，请刷新页面或检查网络。", false);
+            return;
+          }
+          setStatus("请在弹窗中完成安全滑块验证…", true);
+          try {
+            const captcha = new window.TencentCaptcha(
+              CAPTCHA_APP_ID,
+              function (result) {
+                if (result && result.ret === 0 && result.ticket && result.randstr) {
+                  requestSms(result.ticket, result.randstr);
+                } else if (result && result.ret === 2) {
+                  setStatus("已取消安全验证，请重新点击获取验证码。", false);
+                } else {
+                  const reason = (result && result.errorMessage) ? result.errorMessage : "验证未通过";
+                  setStatus("安全验证失败：" + reason, false);
+                }
+              },
+              { enableDarkMode: false }
+            );
+            captcha.show();
+          } catch (err) {
+            setStatus("调用安全滑块组件失败，请刷新页面重试。", false);
+          }
+        });
+
+        formEl.addEventListener("submit", async function (event) {
+          event.preventDefault();
+          if (submitting) return;
+          submitting = true;
+          submitBtn.textContent = "登录中…";
+          refreshButtons();
+          try {
+            const res = await postJson("/kq/fanbook/login", {
+              auth: AUTH,
+              areaCode: areaCodeEl.value,
+              mobile: mobileEl.value.trim(),
+              code: smsCodeEl.value.trim(),
+            });
+            if (res.ok) {
+              formEl.style.display = "none";
+              setStatus("", true);
+              donePanel.style.display = "block";
+              return;
+            }
+            setStatus(res.msg || "登录失败，请检查验证码后重试。", false);
+          } catch (err) {
+            setStatus("登录请求失败，请检查网络连接。", false);
+          } finally {
+            submitting = false;
+            submitBtn.textContent = "登录 Fanbook";
+            refreshButtons();
+          }
+        });
+
+        refreshButtons();
+      })();
+    </script>
+    {% endif %}
+  </body>
+</html>

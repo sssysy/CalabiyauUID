@@ -1,10 +1,13 @@
 """卡拉彼丘账号绑定、解绑、查看与切换。"""
 
+import time
+
 from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import refresh_player_data
 from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import CalabiyauBind
 from ..utils.helper.player_resolve import is_numeric_uid, resolve_player_input
+from ..utils.database.model_fanbook import CalabiyauFanbookUser
 
 
 async def bind_account(
@@ -119,16 +122,35 @@ async def switch_account(
     return f"已切换当前账号为：{account}"
 
 
+def _format_fanbook_status(fanbook_user: CalabiyauFanbookUser | None) -> str:
+    if fanbook_user is None or not fanbook_user.sign:
+        return "Fanbook 登录状态：未登录（发送 kq登录 进行登录）"
+    display_id = fanbook_user.fb_short_id if fanbook_user.fb_short_id else fanbook_user.fb_user_id
+    identity = f"{fanbook_user.nickname}（ID: {display_id}）" if fanbook_user.nickname else f"ID: {display_id}"
+    if fanbook_user.expire_at_ts > 0 and fanbook_user.expire_at_ts <= int(time.time()):
+        return f"Fanbook 登录状态：凭证已过期（{identity}，请发送 kq登录 重新登录）"
+    return f"Fanbook 登录状态：已登录（{identity}）"
+
+
 async def view_accounts(
     bot_id: str,
     user_id: str,
 ) -> str:
     binds = await CalabiyauBind.get_binds(bot_id, user_id)
+    fanbook_user = await CalabiyauFanbookUser.get_account(bot_id, user_id)
+    fanbook_line = _format_fanbook_status(fanbook_user)
     if not binds:
-        return "尚未绑定卡拉彼丘账号。\n发送 kq绑定 <UID 或昵称> 进行绑定。"
+        return "\n".join(
+            [
+                "尚未绑定卡拉彼丘账号。",
+                "发送 kq绑定 <UID 或昵称> 进行绑定。",
+                fanbook_line,
+            ]
+        )
 
     lines = [f"已绑定 {len(binds)} 个卡拉彼丘账号："]
     for index, bind in enumerate(binds, start=1):
         suffix = " [当前账号]" if bind.is_main else ""
         lines.append(f"{index}. {bind.game_uid}{suffix}")
+    lines.append(fanbook_line)
     return "\n".join(lines)
