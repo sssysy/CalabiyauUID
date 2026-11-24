@@ -1,7 +1,8 @@
 import re
+import json
 import time
 import asyncio
-from typing import TypedDict, NotRequired
+from typing import TypedDict, TypeGuard, NotRequired
 from dataclasses import dataclass
 from urllib.parse import quote, urljoin, urlsplit
 
@@ -567,7 +568,7 @@ async def fetch_profile(player_id: str) -> DakanuProfile:
     return await _fetch_profile_sync(player_id)
 
 
-def _is_match_detail_response(value: object) -> bool:
+def is_match_detail_response(value: object) -> TypeGuard[DakanuMatchDetail]:
     if not isinstance(value, dict):
         return False
     if "ok" not in value or value["ok"] is not True:
@@ -603,11 +604,10 @@ def _fetch_match_detail_sync(player_id: str | None, room_id: str) -> DakanuMatch
     except ValueError:
         logger.warning(f"[卡拉彼丘·最近对局] 对局 {room_id} 返回非 JSON 响应")
         return None
-    if not _is_match_detail_response(payload):
+    if not is_match_detail_response(payload):
         logger.warning(f"[卡拉彼丘·最近对局] 对局 {room_id} 响应结构异常")
         return None
-    details: DakanuMatchDetail = payload
-    return details
+    return payload
 
 
 async def fetch_match_detail(player_id: str | None, room_id: str) -> DakanuMatchDetail | None:
@@ -2891,7 +2891,7 @@ def _parse_stats_round_accuracy(raw_list: object) -> tuple[DakanuStatsRoundAccur
     return tuple(result)
 
 
-def _parse_match_statistics(payload: object) -> DakanuMatchStatistics | None:
+def parse_match_statistics(payload: object) -> DakanuMatchStatistics | None:
     if not isinstance(payload, dict):
         return None
     if "ok" not in payload or payload["ok"] is not True:
@@ -2950,8 +2950,14 @@ def _parse_match_statistics(payload: object) -> DakanuMatchStatistics | None:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class DakanuMatchStatisticsPayload:
+    stats: DakanuMatchStatistics
+    raw_json: str
+
+
 @to_thread
-def _fetch_match_statistics_sync(room_id: str, region: str) -> DakanuMatchStatistics:
+def _fetch_match_statistics_sync(room_id: str, region: str) -> DakanuMatchStatisticsPayload:
     url = f"{BASE_URL}/api/match/{room_id}/statistics"
     try:
         with httpx.Client(timeout=90.0, follow_redirects=True) as client:
@@ -2978,8 +2984,9 @@ def _fetch_match_statistics_sync(room_id: str, region: str) -> DakanuMatchStatis
         err_text = _safe_error_text(response)
         raise DakanuError(err_text or "获取对局分析数据失败，请稍后再试。")
 
+    raw_text = response.text
     try:
-        payload: object = response.json()
+        payload: object = json.loads(raw_text)
     except ValueError:
         logger.warning(f"[卡拉彼丘·对局分析] 对局 {room_id} 统计返回非 JSON 响应")
         raise DakanuError("对局分析数据格式异常，请稍后再试。") from None
@@ -2990,13 +2997,19 @@ def _fetch_match_statistics_sync(room_id: str, region: str) -> DakanuMatchStatis
             raise DakanuError(err.strip())
         raise DakanuError("战绩站暂未提供该对局的分析数据。")
 
-    parsed = _parse_match_statistics(payload)
+    parsed = parse_match_statistics(payload)
     if parsed is None:
         logger.warning(f"[卡拉彼丘·对局分析] 对局 {room_id} 统计响应结构异常")
         raise DakanuError("对局分析数据格式异常，请稍后再试。")
-    return parsed
+    return DakanuMatchStatisticsPayload(stats=parsed, raw_json=raw_text)
+
+
+async def fetch_match_statistics_payload(room_id: str, *, region: str = "cn") -> DakanuMatchStatisticsPayload:
+    """获取单场对局的回放解析统计数据及原始 JSON 文本。"""
+    return await _fetch_match_statistics_sync(room_id, region)
 
 
 async def fetch_match_statistics(room_id: str, *, region: str = "cn") -> DakanuMatchStatistics:
     """获取单场对局的回放解析全局统计数据。"""
-    return await _fetch_match_statistics_sync(room_id, region)
+    result = await fetch_match_statistics_payload(room_id, region=region)
+    return result.stats

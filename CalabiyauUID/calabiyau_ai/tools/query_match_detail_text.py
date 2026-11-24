@@ -8,8 +8,8 @@ from ...utils.api.dakanu import (
     DakanuMatchTeam,
     DakanuMatchPlayer,
     is_valid_room_id,
-    fetch_match_detail,
 )
+from ...utils.helper.match_cache import get_match_detail
 from ...utils.database.model_bind import get_main_uid
 from ...utils.helper.player_resolve import resolve_player_input
 
@@ -78,7 +78,7 @@ async def calabiyau_query_match_detail(
         player_id = bound_uid
 
     try:
-        detail = await fetch_match_detail(player_id, cleaned_room)
+        detail = await get_match_detail(player_id, cleaned_room)
     except DakanuError as exc:
         return f"获取对局 {cleaned_room} 详情失败：{exc}"
 

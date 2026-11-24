@@ -24,11 +24,10 @@ from ..utils.api.dakanu import (
     DakanuStatsRoundResult,
     role_image_url,
     is_valid_room_id,
-    fetch_match_detail,
-    fetch_match_statistics,
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.assets import image_data_uri, local_role_image, local_faction_image
+from ..utils.helper.match_cache import get_match_detail, get_match_statistics
 from ..utils.render.html.renderer.match_analysis_card import (
     MatchAnalysisPlayerRow,
     MatchAnalysisRoundItem,
@@ -551,7 +550,7 @@ def _build_round_team_col(
 
 async def _fetch_optional_match_detail(room_id: str) -> DakanuMatchDetail | None:
     try:
-        return await fetch_match_detail(None, room_id)
+        return await get_match_detail(None, room_id)
     except DakanuError as exc:
         logger.warning(f"[卡拉彼丘·对局分析] 获取对局 {room_id} 补充详情失败，仅使用回放统计：{exc}")
         return None
@@ -560,7 +559,7 @@ async def _fetch_optional_match_detail(room_id: str) -> DakanuMatchDetail | None
 async def build_match_analysis_card(room_id: str) -> bytes:
     """拉取单场对局的回放统计与详情，并渲染为对局分析 PNG 卡片。"""
     stats, detail = await asyncio.gather(
-        fetch_match_statistics(room_id),
+        get_match_statistics(room_id),
         _fetch_optional_match_detail(room_id),
     )
 

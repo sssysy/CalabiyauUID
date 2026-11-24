@@ -5,9 +5,10 @@ from dataclasses import dataclass
 
 from gsuid_core.logger import logger
 
-from ..api.dakanu import DakanuError, DakanuMatch, DakanuMatchDetail, DakanuMatchPlayer, fetch_match_detail
+from ..api.dakanu import DakanuError, DakanuMatch, DakanuMatchDetail, DakanuMatchPlayer
+from .match_cache import get_match_detail
 
-_DETAIL_CONCURRENCY = 4
+_DETAIL_CONCURRENCY = 2
 
 
 @dataclass(frozen=True)
@@ -100,7 +101,7 @@ async def load_recent_match_views(
     async def load_one(match: DakanuMatch) -> DakanuMatchDetail | None:
         async with semaphore:
             try:
-                return await fetch_match_detail(player_id, match["roomId"])
+                return await get_match_detail(player_id, match["roomId"], match_mode=match["mode"])
             except DakanuError as exc:
                 logger.warning(f"[卡拉彼丘·历史战绩] 读取对局 {match['roomId']} 详情失败：{exc}")
                 return None
