@@ -33,6 +33,9 @@ sv_stats = SV("卡拉彼丘战绩查询")
     """,
     covers=["卡拉彼丘个人战绩总览卡片、排位/挑战段位、KD胜率及常用角色"],
     aliases=["卡拉彼丘·战绩查询", "卡拉彼丘·个人主页"],
+    timeout=120.0,
+    background=True,
+    background_grace=5.0,
 )
 async def calabiyau_stats_summary(bot: Bot, ev: Event) -> None:
     player_id, season, error = await resolve_stats_query(ev)

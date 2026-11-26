@@ -30,6 +30,9 @@ sv_replay = SV("卡拉彼丘回放下载")
     """,
     covers=["卡拉彼丘指定对局roomId的录像回放文件下载"],
     aliases=["卡拉彼丘·下载回放", "卡拉彼丘·下载录像"],
+    timeout=180.0,
+    background=True,
+    background_grace=5.0,
 )
 async def calabiyau_replay_download(bot: Bot, ev: Event) -> None:
     room_id = parse_room_id(ev.text)

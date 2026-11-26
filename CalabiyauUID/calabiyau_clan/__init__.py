@@ -31,6 +31,9 @@ sv_clan = SV("卡拉彼丘战队")
     """,
     covers=["卡拉彼丘战队资料、等级人数、简介及成员列表查询"],
     aliases=["卡拉彼丘·查战队", "卡拉彼丘·战队信息"],
+    timeout=120.0,
+    background=True,
+    background_grace=5.0,
 )
 async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
     resolved = await resolve_clan_target_with_refresh(

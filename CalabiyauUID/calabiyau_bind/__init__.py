@@ -21,13 +21,16 @@ sv_bind = SV("卡拉彼丘账号绑定")
     to_ai="""绑定卡拉彼丘国服账号并拉取首次战绩快照
 
     当用户要求绑定卡拉彼丘账号、关联游戏UID或游戏昵称时调用。
-    调用后会同步验证账号并拉取首次战绩，完成后即可查询战绩总览或历史战绩。
+    调用后会验证账号并拉取首次战绩，完成后即可查询战绩总览或历史战绩。
 
     Args:
         text: 卡拉彼丘纯数字 UID 或游戏昵称，例如 "1234567" 或 "星绘玩家"
     """,
     covers=["卡拉彼丘国服账号绑定、UID/昵称解析及首次战绩快照拉取"],
     aliases=["卡拉彼丘·绑定账号", "卡拉彼丘·绑定UID"],
+    timeout=120.0,
+    background=True,
+    background_grace=5.0,
 )
 async def calabiyau_bind(bot: Bot, ev: Event) -> None:
     query = ev.text.strip()

@@ -34,6 +34,9 @@ sv_matches = SV("卡拉彼丘历史战绩")
     """,
     covers=["卡拉彼丘当前账号最近8场对局记录卡片、地图角色战绩与roomId"],
     aliases=["卡拉彼丘·最近战绩", "卡拉彼丘·对局记录"],
+    timeout=120.0,
+    background=True,
+    background_grace=5.0,
 )
 async def calabiyau_recent_matches(bot: Bot, ev: Event) -> None:
     player_id, error = await resolve_match_player_id(ev)
