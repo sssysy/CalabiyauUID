@@ -6,6 +6,7 @@ from dataclasses import field, dataclass
 from collections.abc import Mapping
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
+from .matches_card import MatchCardItem, MatchCardAssets, build_match_card_item
 from ....api.dakanu import (
     DakanuMode,
     DakanuRole,
@@ -19,10 +20,12 @@ from ....api.dakanu import (
     DakanuPresence,
 )
 from ....helper.maps import ROLE_POSITIONS, resolve_role_meta, get_role_display_names
+from ....helper.recent_matches import MatchView
 
 _TREND_POINTS = 20
 _RECENT_FORM_LIMIT = 20
 _ACTIVITY_HOURS_LIMIT = 100
+_SEASON_RECENT_MATCHES_LIMIT = 5
 
 _TREND_WIDTH = 576.0
 _TREND_HEIGHT = 224.0
@@ -184,6 +187,8 @@ class SummaryAssets:
     avatar_frame: str = ""
     medal_images: Mapping[int, str] = field(default_factory=dict)
     avatar_images: Mapping[int, str] = field(default_factory=dict)
+    map_images: Mapping[str, str] = field(default_factory=dict)
+    recent_match_views: tuple[MatchView, ...] = ()
     is_season_view: bool = False
 
 
@@ -431,6 +436,7 @@ class SummaryTemplateContext(CardTemplateContext):
     activity_hours: ActivityHoursBlock | None = None
     roles: tuple[RoleItem, ...] = ()
     modes: tuple[ModeItem, ...] = ()
+    recent_matches: tuple[MatchCardItem, ...] = ()
     team_ups: tuple[RelationshipItem, ...] = ()
     rivals: tuple[RelationshipItem, ...] = ()
 
@@ -970,14 +976,25 @@ def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -
     draws = sum(1 for match in valid if match["result"] == "draw")
     games = len(valid)
     win_rate_pct = round(wins / games * 100)
-    total_k = sum(match["kills"] for match in recent)
-    total_d = sum(match["deaths"] for match in recent)
-    total_a = sum(match["assists"] for match in recent)
-    total_tk = sum(match["teamKills"] for match in recent if "teamKills" in match and match["teamKills"] is not None)
+    kda_matches = [
+        match
+        for match in recent
+        if match["kills"] is not None and match["deaths"] is not None and match["assists"] is not None
+    ]
+    total_k = sum(match["kills"] for match in kda_matches if match["kills"] is not None)
+    total_d = sum(match["deaths"] for match in kda_matches if match["deaths"] is not None)
+    total_a = sum(match["assists"] for match in kda_matches if match["assists"] is not None)
+    total_tk = sum(
+        match["teamKills"] for match in kda_matches if "teamKills" in match and match["teamKills"] is not None
+    )
     kda_ratio = (total_k + total_a) / total_d if total_d > 0 else float(total_k + total_a)
     kp_text = f"{round((total_k + total_a) / total_tk * 100)}%" if total_tk > 0 else "—"
-    match_denom = max(1, len(recent))
-    avg_kda_line = f"{total_k / match_denom:.1f} / {total_d / match_denom:.1f} / {total_a / match_denom:.1f}"
+    match_denom = max(1, len(kda_matches))
+    avg_kda_line = (
+        f"{total_k / match_denom:.1f} / {total_d / match_denom:.1f} / {total_a / match_denom:.1f}"
+        if kda_matches
+        else "— / — / —"
+    )
 
     role_names_map: dict[int, str] = dict(get_role_display_names())
     for role in profile["roles"]:
@@ -987,7 +1004,7 @@ def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -
     pos_counts: dict[int, int] = {code: 0 for code in ROLE_POSITIONS}
     for match in recent:
         rid = match["roleId"]
-        if rid <= 0:
+        if rid is None or rid <= 0:
             continue
         if rid not in role_agg:
             role_agg[rid] = {"games": 0, "wins": 0, "losses": 0, "draws": 0, "k": 0, "d": 0, "a": 0}
@@ -999,9 +1016,12 @@ def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -
             bucket["losses"] += 1
         elif match["result"] == "draw":
             bucket["draws"] += 1
-        bucket["k"] += match["kills"]
-        bucket["d"] += match["deaths"]
-        bucket["a"] += match["assists"]
+        if match["kills"] is not None:
+            bucket["k"] += match["kills"]
+        if match["deaths"] is not None:
+            bucket["d"] += match["deaths"]
+        if match["assists"] is not None:
+            bucket["a"] += match["assists"]
         meta = resolve_role_meta(rid)
         if meta is not None and meta.position_code in pos_counts:
             pos_counts[meta.position_code] += 1
@@ -1086,6 +1106,53 @@ def _build_activity_hours(matches: list[DakanuMatch]) -> ActivityHoursBlock:
         morning_cells=tuple(cells[:12]),
         afternoon_cells=tuple(cells[12:]),
     )
+
+
+def _season_started_at(profile: DakanuProfile) -> int | None:
+    meta = profile["meta"]
+    if "currentSeasonStartedAt" not in meta:
+        return None
+    started_at = meta["currentSeasonStartedAt"]
+    if isinstance(started_at, int) and started_at > 0:
+        return started_at
+    return None
+
+
+def select_current_season_matches(
+    profile: DakanuProfile,
+    limit: int = _SEASON_RECENT_MATCHES_LIMIT,
+) -> list[DakanuMatch]:
+    """按当前赛季开赛时间筛选最近对局；缺失开赛时间时返回空列表。"""
+    started_at = _season_started_at(profile)
+    if started_at is None:
+        return []
+    seen_rooms: set[str] = set()
+    candidates: list[DakanuMatch] = []
+    for match in profile["matches"]:
+        if match["playedAt"] < started_at:
+            continue
+        room_id = match["roomId"]
+        if room_id in seen_rooms:
+            continue
+        seen_rooms.add(room_id)
+        candidates.append(match)
+    candidates.sort(key=lambda item: item["playedAt"], reverse=True)
+    return candidates[:limit]
+
+
+def _build_recent_matches(
+    assets: SummaryAssets,
+) -> tuple[MatchCardItem, ...]:
+    if not assets.recent_match_views:
+        return ()
+    match_assets = MatchCardAssets(
+        player_avatar=assets.avatar,
+        avatar_images=assets.avatar_images,
+        role_images=assets.role_images,
+        map_images=assets.map_images,
+        clan_name=assets.clan_name,
+    )
+    return tuple(build_match_card_item(view, match_assets) for view in assets.recent_match_views)
 
 
 def _build_team_ups(profile: DakanuProfile, avatar_images: Mapping[int, str]) -> tuple[RelationshipItem, ...]:
@@ -1245,6 +1312,7 @@ def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> Sum
         activity_hours=None if assets.is_season_view else _build_activity_hours(profile["matches"]),
         roles=roles,
         modes=modes,
+        recent_matches=() if assets.is_season_view else _build_recent_matches(assets),
         team_ups=() if assets.is_season_view else _build_team_ups(profile, assets.avatar_images),
         rivals=() if assets.is_season_view else _build_rivals(profile, assets.avatar_images),
     )

@@ -971,6 +971,332 @@ body {
 .mode-grid .stat-value {
   font-size: 13px;
 }
+.rm-list {
+  display: flex;
+  flex-direction: column;
+}
+.rm-item {
+  display: flex;
+  background: transparent;
+}
+.rm-win .rm-main {
+  background: rgba(243, 247, 255, .32);
+}
+.rm-lose .rm-main {
+  background: rgba(255, 245, 244, .32);
+}
+.rm-draw .rm-main {
+  background: rgba(255, 250, 240, .32);
+}
+.rm-bar {
+  width: 4px;
+  flex: none;
+  background: #4b8ef0;
+}
+.rm-lose .rm-bar {
+  background: #e2453c;
+}
+.rm-draw .rm-bar {
+  background: #b8862c;
+}
+.rm-unknown .rm-bar {
+  background: #9aa5b5;
+}
+.rm-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rm-art {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center 30%;
+  background-repeat: no-repeat;
+}
+.rm-veil {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, .58);
+}
+.rm-win .rm-veil {
+  background: rgba(243, 247, 255, .56);
+}
+.rm-lose .rm-veil {
+  background: rgba(255, 245, 244, .56);
+}
+.rm-draw .rm-veil {
+  background: rgba(255, 250, 240, .56);
+}
+.rm-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px 6px;
+}
+.rm-info {
+  display: flex;
+  width: 98px;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rm-mode {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f172a;
+}
+.rm-time, .rm-duration {
+  font-size: 10px;
+  color: #1e293b;
+  white-space: nowrap;
+}
+.rm-result {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+}
+.rm-lose .rm-result {
+  color: #c62828;
+}
+.rm-draw .rm-result {
+  color: #946200;
+}
+.rm-unknown .rm-result {
+  color: #6f7c8f;
+}
+.rm-kda-wrap {
+  display: flex;
+  width: 158px;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rm-role-wrap {
+  position: relative;
+  display: flex;
+  width: 48px;
+  height: 52px;
+  flex: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+.rm-role-art {
+  display: flex;
+  width: 46px;
+  height: 50px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #edf2f8;
+}
+.rm-role-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.rm-role-empty {
+  width: 42px;
+  height: 42px;
+  border: 1px dashed #b4bfce;
+  border-radius: 50%;
+  background: transparent;
+}
+.rm-badge {
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  padding: 0 5px;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+}
+.rm-badge-mvp {
+  background: #b8862c;
+}
+.rm-badge-svp {
+  background: #4b8ef0;
+}
+.rm-kda-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.rm-kda-line {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  color: #0f172a;
+}
+.rm-kda-line i {
+  margin: 0 2px;
+  font-style: normal;
+  color: #1e293b;
+}
+.rm-kda-line .rm-death {
+  color: #c62828;
+}
+.rm-kda-ratio, .rm-kda-extra {
+  font-size: 10px;
+  color: #1e293b;
+  white-space: nowrap;
+}
+.rm-score-box {
+  display: flex;
+  width: 78px;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.rm-score-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.rm-score-single, .rm-score-self {
+  color: #0f172a;
+}
+.rm-win .rm-score-self {
+  color: #208a49;
+}
+.rm-lose .rm-score-self {
+  color: #c62828;
+}
+.rm-score-op {
+  color: #0f172a;
+}
+.rm-score-sep {
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 600;
+}
+.rm-score-label {
+  color: #1e293b;
+  font-size: 10px;
+  font-weight: 600;
+}
+.rm-delta {
+  font-size: 10px;
+  font-weight: 700;
+}
+.rm-delta.is-up {
+  color: #168343;
+}
+.rm-delta.is-down {
+  color: #c62828;
+}
+.rm-map-name {
+  max-width: 78px;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rm-roster {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 6px;
+}
+.rm-roster-team {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.rm-roster-player {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 16px;
+}
+.rm-mini-avatar {
+  display: flex;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #dce3eb;
+  font-size: 7.5px;
+  font-weight: 700;
+  color: #53657a;
+}
+.rm-mini-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rm-roster-name {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 9.5px;
+  line-height: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1e293b;
+}
+.rm-roster-player.is-target .rm-roster-name {
+  color: #18784a;
+  font-weight: 700;
+}
+.rm-roster.is-empty {
+  align-items: center;
+  justify-content: center;
+  color: #1e293b;
+  font-size: 10px;
+}
+.rm-footer {
+  position: relative;
+  padding: 0 12px 7px;
+  color: #1e293b;
+  font-size: 9px;
+}
+.rm-footer span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .62);
+  font-family: "Mono", monospace;
+}
 .empty {
   padding: 22px 17px;
   color: #1e293b;
@@ -1371,6 +1697,88 @@ body {
         <div class="empty">暂无模式统计</div>
         {% endif %}
       </div>
+      {% if not data.is_season_view and data.recent_matches %}
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">最近对局</span><span class="panel-note">{{ data.season }}</span></div>
+        <div class="rm-list">
+          {% for match in data.recent_matches %}
+          <article class="rm-item rm-{{ match.result_class }}">
+            <div class="rm-bar"></div>
+            <div class="rm-main">
+              {% if match.map_asset %}
+              <div class="rm-art" style="background-image:url('{{ match.map_asset }}')"></div>
+              <div class="rm-veil"></div>
+              {% endif %}
+              <div class="rm-content">
+                <div class="rm-info">
+                  <span class="rm-mode">{{ match.mode_label }}</span>
+                  <span class="rm-time">{{ match.played_at }}</span>
+                  <span class="rm-result">{{ match.result_label }}</span>
+                  <span class="rm-duration">{{ match.duration }}</span>
+                </div>
+                <div class="rm-kda-wrap">
+                  <div class="rm-role-wrap">
+                    {% if match.role_asset %}
+                    <div class="rm-role-art"><img src="{{ match.role_asset }}" alt=""></div>
+                    {% else %}
+                    <div class="rm-role-art rm-role-empty"></div>
+                    {% endif %}
+                    {% if match.badge_text %}
+                    <span class="rm-badge rm-badge-{{ match.badge_tone }}">{{ match.badge_text }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="rm-kda-body">
+                    <span class="rm-kda-line"><b>{{ match.kills }}</b><i>/</i><b class="rm-death">{{ match.deaths }}</b><i>/</i><b>{{ match.assists }}</b></span>
+                    <span class="rm-kda-ratio">{{ match.kda_ratio }} : 1 KDA</span>
+                    {% if match.participation %}
+                    <span class="rm-kda-extra">{{ match.participation }}</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="rm-score-box">
+                  <div class="rm-score-line">
+                    {% if match.opponent_score is none %}
+                    <span class="rm-score-single">{{ match.my_score }}</span>
+                    {% else %}
+                    <span class="rm-score-self">{{ match.my_score }}</span>
+                    <span class="rm-score-sep">:</span>
+                    <span class="rm-score-op">{{ match.opponent_score }}</span>
+                    {% endif %}
+                  </div>
+                  <span class="rm-score-label">得分</span>
+                  {% if match.delta_text %}
+                  <span class="rm-delta {{ match.delta_class }}">{{ match.delta_text }}</span>
+                  {% endif %}
+                  <span class="rm-map-name">{{ match.map_name }}</span>
+                </div>
+                {% if match.teams %}
+                <div class="rm-roster">
+                  {% for team in match.teams %}
+                  <div class="rm-roster-team">
+                    {% for player in team.players %}
+                    <div class="rm-roster-player{% if player.is_target %} is-target{% endif %}">
+                      {% if player.avatar %}
+                      <span class="rm-mini-avatar"><img src="{{ player.avatar }}" alt=""></span>
+                      {% else %}
+                      <span class="rm-mini-avatar">{{ player.initial }}</span>
+                      {% endif %}
+                      <span class="rm-roster-name">{{ player.nickname }}</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <div class="rm-roster is-empty">阵容详情暂不可用</div>
+                {% endif %}
+              </div>
+              <div class="rm-footer"><span>对局编号：{{ match.room_id }}</span></div>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="footer">{{ data.footer_text }}</div>

@@ -1,6 +1,7 @@
 """战绩总览的账号解析、本地快照读取与渲染编排。"""
 
 import base64
+import asyncio
 
 from gsuid_core.models import Event
 
@@ -13,11 +14,13 @@ from ..utils.api.dakanu import (
     fetch_player_season,
 )
 from ..utils.downloader import resolve_image
+from ..utils.helper.maps import resolve_map
 from ..utils.helper.assets import (
     local_role_image,
     local_tier_image,
     local_frame_image,
     local_avatar_image,
+    local_map_slug_image,
     local_baseplate_image,
     local_frame_index_image,
     local_challenge_tier_image,
@@ -33,6 +36,7 @@ from ..utils.helper.ai_bridge import emit_ai_text, format_player_snapshot_summar
 from ..utils.helper.player_data import PlayerSnapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
+from ..utils.helper.recent_matches import MatchView, load_recent_match_views
 from ..utils.render.html.renderer.summary_card import (
     SummaryAssets,
     tier_index,
@@ -40,6 +44,7 @@ from ..utils.render.html.renderer.summary_card import (
     render_summary_card,
     challenge_tier_display,
     resolve_challenge_tier,
+    select_current_season_matches,
 )
 
 
@@ -144,16 +149,31 @@ async def render_snapshot_card(
     for role in profile["roles"][:5]:
         if role["roleId"] not in role_ids:
             role_ids.append(role["roleId"])
+    recent_match_views: list[MatchView] = []
+    map_slugs: list[str] = []
     if not is_season_view:
         for match in profile["matches"][:20]:
-            if match["roleId"] > 0 and match["roleId"] not in role_ids:
-                role_ids.append(match["roleId"])
+            role_id = match["roleId"]
+            if role_id is not None and role_id > 0 and role_id not in role_ids:
+                role_ids.append(role_id)
+        season_matches = select_current_season_matches(profile)
+        if season_matches:
+            recent_match_views = await load_recent_match_views(
+                profile["player"]["id"],
+                season_matches,
+                limit=len(season_matches),
+            )
+            for view in recent_match_views:
+                role_id = view.match["roleId"]
+                if role_id is not None and role_id > 0 and role_id not in role_ids:
+                    role_ids.append(role_id)
+                map_info = resolve_map(view.match["mapId"])
+                if map_info is not None and map_info.slug and map_info.slug not in map_slugs:
+                    map_slugs.append(map_info.slug)
 
-    role_images: dict[int, str] = {}
-    for role_id in role_ids:
+    async def _load_role(role_id: int) -> tuple[int, str]:
         path = await resolve_image(role_image_url(role_id), local_role_image(role_id))
-        if path is not None:
-            role_images[role_id] = _data_uri(path.read_bytes(), path.suffix)
+        return role_id, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
 
     rel_avatar_ids: list[int] = []
     if not is_season_view:
@@ -165,12 +185,29 @@ async def render_snapshot_card(
             for rival in profile["rivals"][:5]:
                 if rival["avatarId"] > 0 and rival["avatarId"] not in rel_avatar_ids:
                     rel_avatar_ids.append(rival["avatarId"])
+        for view in recent_match_views:
+            for team in view.teams:
+                for roster_player in team.players:
+                    roster_avatar_id = roster_player["avatarId"]
+                    if roster_avatar_id > 0 and roster_avatar_id not in rel_avatar_ids:
+                        rel_avatar_ids.append(roster_avatar_id)
 
-    avatar_images: dict[int, str] = {}
-    for rel_avatar_id in rel_avatar_ids:
+    async def _load_avatar(rel_avatar_id: int) -> tuple[int, str]:
         path = await resolve_image(avatar_image_url(rel_avatar_id), local_avatar_image(rel_avatar_id))
-        if path is not None:
-            avatar_images[rel_avatar_id] = _data_uri(path.read_bytes(), path.suffix)
+        return rel_avatar_id, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
+
+    async def _load_map(slug: str) -> tuple[str, str]:
+        path = await resolve_image(f"https://www.dakanu.com/maps-wide/{slug}.webp", local_map_slug_image(slug))
+        return slug, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
+
+    role_pairs, avatar_pairs, map_pairs = await asyncio.gather(
+        asyncio.gather(*(_load_role(role_id) for role_id in role_ids)),
+        asyncio.gather(*(_load_avatar(rel_avatar_id) for rel_avatar_id in rel_avatar_ids)),
+        asyncio.gather(*(_load_map(slug) for slug in map_slugs)),
+    )
+    role_images: dict[int, str] = {role_id: uri for role_id, uri in role_pairs if uri}
+    avatar_images: dict[int, str] = {rel_avatar_id: uri for rel_avatar_id, uri in avatar_pairs if uri}
+    map_images: dict[str, str] = {slug: uri for slug, uri in map_pairs if uri}
 
     assets = SummaryAssets(
         avatar=_data_uri(avatar_path.read_bytes(), avatar_path.suffix),
@@ -188,6 +225,8 @@ async def render_snapshot_card(
         clan_name=snapshot.clan["name"] if snapshot.clan is not None else "",
         leisure=leisure,
         avatar_images=avatar_images,
+        map_images=map_images,
+        recent_match_views=tuple(recent_match_views),
         is_season_view=is_season_view,
     )
     return await render_summary_card(profile, assets)

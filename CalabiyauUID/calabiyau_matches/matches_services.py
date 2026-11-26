@@ -94,7 +94,9 @@ async def _build_assets(snapshot: PlayerSnapshot, views: list[MatchView]) -> Mat
     role_ids: set[int] = set()
     map_infos: list[MapInfo] = []
     for view in views:
-        role_ids.add(view.match["roleId"])
+        role_id = view.match["roleId"]
+        if role_id is not None and role_id > 0:
+            role_ids.add(role_id)
         map_info = resolve_map(view.match["mapId"])
         if map_info is not None:
             map_infos.append(map_info)
@@ -127,7 +129,8 @@ def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[Match
         match = view.match
         map_info = resolve_map(match["mapId"])
         map_name = map_info.name if map_info is not None else f"地图#{match['mapId']}"
-        role_name = resolve_role_name(match["roleId"]) or f"角色#{match['roleId']}"
+        role_id = match["roleId"]
+        role_name = (resolve_role_name(role_id) or f"角色#{role_id}") if role_id is not None else "未知角色"
         score_text = (
             f"{match['myScore']}:{match['opponentScore']}"
             if match["myScore"] is not None and match["opponentScore"] is not None
@@ -139,10 +142,16 @@ def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[Match
             delta_text = f" 分数{sign}{match['divisionScoreDelta']}"
         badge = " [MVP]" if match["mvp"] else (" [SVP]" if match["svp"] else "")
         played_str = datetime.fromtimestamp(match["playedAt"] / 1000).strftime("%m-%d %H:%M")
+        duration_text = f"{match['durationSeconds']}s" if match["durationSeconds"] is not None else "-"
+        kda_text = (
+            f"{match['kills']}/{match['deaths']}/{match['assists']}"
+            if match["kills"] is not None and match["deaths"] is not None and match["assists"] is not None
+            else "-"
+        )
         lines.append(
             f"{idx}. [{match['result']}] {match['modeLabel']} · {map_name} · {role_name} | "
-            f"比分 {score_text} | KDA {match['kills']}/{match['deaths']}/{match['assists']}{badge}{delta_text} | "
-            f"时长 {match['durationSeconds']}s | {played_str} | roomId={match['roomId']}"
+            f"比分 {score_text} | KDA {kda_text}{badge}{delta_text} | "
+            f"时长 {duration_text} | {played_str} | roomId={match['roomId']}"
         )
     lines.append(f"本地快照时间：{saved_time}")
     return "\n".join(lines)

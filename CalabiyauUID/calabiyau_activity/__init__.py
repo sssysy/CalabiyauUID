@@ -12,7 +12,7 @@ sv_activity = SV("卡拉彼丘活动")
 
 
 @sv_activity.on_fullmatch(
-    "活动",
+    ("活动", "日历"),
     block=True,
     to_ai="""查询卡拉彼丘当前进行中的官方活动时间轴
 

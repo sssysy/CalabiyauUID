@@ -74,7 +74,9 @@ def _date_text(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
 
 
-def _duration_text(seconds: int) -> str:
+def _duration_text(seconds: int | None) -> str:
+    if seconds is None or seconds <= 0:
+        return "—"
     minutes, remainder = divmod(max(0, seconds), 60)
     if minutes >= 60:
         hours, minutes = divmod(minutes, 60)
@@ -96,7 +98,7 @@ def _match_stats(view: MatchView) -> tuple[int, int, int]:
     target = view.target_player
     if target is None:
         match = view.match
-        return match["kills"], match["deaths"], match["assists"]
+        return match["kills"] or 0, match["deaths"] or 0, match["assists"] or 0
     return target["kills"], target["deaths"], target["assists"]
 
 
@@ -120,8 +122,8 @@ def _map_asset(assets: MatchCardAssets, map_info: MapInfo | None) -> str:
     return ""
 
 
-def _role_asset(assets: MatchCardAssets, role_id: int) -> str:
-    if role_id in assets.role_images:
+def _role_asset(assets: MatchCardAssets, role_id: int | None) -> str:
+    if role_id is not None and role_id in assets.role_images:
         return assets.role_images[role_id]
     return ""
 
@@ -171,7 +173,7 @@ def _build_roster_teams(view: MatchView, assets: MatchCardAssets) -> tuple[Roste
     return tuple(teams)
 
 
-def _build_match_item(view: MatchView, assets: MatchCardAssets) -> MatchCardItem:
+def build_match_card_item(view: MatchView, assets: MatchCardAssets) -> MatchCardItem:
     match = view.match
     result_label, result_class = _result(match["result"])
     role_asset = _role_asset(assets, match["roleId"])
@@ -227,7 +229,7 @@ def _build_matches_context(
         season=profile["meta"]["currentSeason"],
         clan_name=assets.clan_name,
         match_count=len(views),
-        matches=tuple(_build_match_item(view, assets) for view in views),
+        matches=tuple(build_match_card_item(view, assets) for view in views),
     )
 
 

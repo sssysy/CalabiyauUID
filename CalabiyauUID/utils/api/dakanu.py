@@ -154,20 +154,20 @@ class DakanuMatch(TypedDict):
     modeLabel: str
     playMode: str
     mapId: int
-    roleId: int
+    roleId: int | None
     result: str
     myScore: int | None
     opponentScore: int | None
-    durationSeconds: int
+    durationSeconds: int | None
     playedAt: int
     myRanking: int | None
     mvp: bool
     svp: bool
     divisionScore: int | None
     divisionScoreDelta: int | None
-    kills: int
-    deaths: int
-    assists: int
+    kills: int | None
+    deaths: int | None
+    assists: int | None
     teamKills: int | None
 
 
@@ -255,6 +255,7 @@ class DakanuMeta(TypedDict):
     warnings: list[str]
     fetchedAt: int
     stale: str | None
+    currentSeasonStartedAt: NotRequired[int | None]
     observedMatches: int
     lastCheckedAt: int
 
