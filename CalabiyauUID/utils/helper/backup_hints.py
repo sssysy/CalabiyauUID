@@ -2,7 +2,14 @@
 
 from gsuid_core.logger import logger
 
-from ..utils.paths import CACHE_DIR, CONFIG_PATH, IMG_CACHE_DIR, CUSTOM_BG_PATH, PLAYER_DATA_DIR
+from ..utils.paths import (
+    CACHE_DIR,
+    CONFIG_PATH,
+    RESOURCE_DIR,
+    IMG_CACHE_DIR,
+    CUSTOM_BG_PATH,
+    PLAYER_DATA_DIR,
+)
 
 _PLUGIN_NAME = "CalabiyauUID"
 
@@ -46,4 +53,10 @@ def register_calabiyau_backup_hints() -> None:
         CACHE_DIR,
         "regenerable",
         "对局回放等临时缓存文件",
+    )
+    register_backup_path(
+        _PLUGIN_NAME,
+        RESOURCE_DIR,
+        "regenerable",
+        "Git 同步的静态资源仓库",
     )
