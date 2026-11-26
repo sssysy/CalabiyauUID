@@ -17,6 +17,22 @@ _ANALYST_PROMPT = """你是卡拉彼丘（Calabiyau）战绩与版本数据分�
 - 排行榜的排名 `rankPos` 可能存在并列重复，按接口原值陈述，不要自行改写为连续名次。
 - 输出结论需条理清晰、数据有据可查（列出关键样本场次、胜率、KD、场均伤害及对比结论）。"""
 
+_EXCLUSIVE_ANALYSIS_TOOLS: tuple[str, ...] = (
+    "calabiyau_query_player_text",
+    "calabiyau_query_match_detail",
+)
+
+_SHARED_QUERY_TOOLS: tuple[str, ...] = (
+    "calabiyau_lookup_role",
+    "calabiyau_stats_summary",
+    "calabiyau_recent_matches",
+    "calabiyau_roles_ranking",
+    "calabiyau_ranking",
+    "calabiyau_role_board_ranking",
+    "calabiyau_clan_info",
+    "calabiyau_event_timeline",
+)
+
 
 def register_calabiyau_analyst_node() -> None:
     """注册卡拉彼丘战绩分析能力代理节点。"""
@@ -35,23 +51,10 @@ def register_calabiyau_analyst_node() -> None:
                 "klbq",
                 "Calabiyau",
                 "超弦体",
-                "战绩分析",
-                "复盘",
-                "上分建议",
             ],
             tool_packs=[TASK_BASICS_PACK],
-            tool_names=[
-                "calabiyau_query_player_text",
-                "calabiyau_query_match_detail",
-                "calabiyau_lookup_role",
-                "calabiyau_stats_summary",
-                "calabiyau_recent_matches",
-                "calabiyau_roles_ranking",
-                "calabiyau_ranking",
-                "calabiyau_role_board_ranking",
-                "calabiyau_clan_info",
-                "calabiyau_event_timeline",
-            ],
+            tool_names=[*_EXCLUSIVE_ANALYSIS_TOOLS, *_SHARED_QUERY_TOOLS],
+            shared_tool_names=list(_SHARED_QUERY_TOOLS),
             boundary_override="",
             source="plugin",
         )
