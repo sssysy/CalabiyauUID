@@ -9,7 +9,7 @@ from gsuid_core.segment import MessageSegment
 
 from .bind_services import bind_account, view_accounts, switch_account, unbind_account_by_query
 from ..utils.api.dakanu import DakanuError
-from ..utils.helper.refresh import track_background
+from ..utils.utils.background import track_background_task
 from ..utils.helper.player_resolve import resolve_player_input
 
 sv_bind = SV("卡拉彼丘账号绑定")
@@ -50,7 +50,7 @@ async def calabiyau_bind(bot: Bot, ev: Event) -> None:
 
     await bot.send(f"已开始验证 UID {game_uid} 并拉取首次战绩，通常需要 10～30 秒。\n完成后会在这个会话提醒你。")
     task = asyncio.create_task(_bind_and_notify(bot, ev, game_uid))
-    track_background(task)
+    track_background_task(task)
 
 
 async def _bind_and_notify(bot: Bot, ev: Event, game_uid: str) -> None:

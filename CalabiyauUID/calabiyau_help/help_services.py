@@ -20,6 +20,7 @@ from ..version import CalabiyauUID_version
 from ..utils.api.steam import fetch_steam_help_assets
 from ..utils.downloader import download_to_dir
 from ..utils.utils.paths import DATA_DIR
+from ..utils.utils.background import track_background_task
 
 ICON: Path = Path(__file__).parent.parent.parent / "ICON.png"
 HELP_DATA: Path = Path(__file__).parent / "help.json"
@@ -39,8 +40,6 @@ _BLUR_RADIUS = 12
 _BANNER_SUB_TEXT = "喵拉喵丘喵了喵！~"
 _FOOTER_TEXT = "Create by GsCore & Power by CalabiyauUID & Author by sssysy"
 _LOG_TAG = "[卡拉彼丘·帮助]"
-
-_background_tasks: set[asyncio.Task[None]] = set()
 
 
 def _is_nonempty_file(path: Path) -> bool:
@@ -285,17 +284,7 @@ async def sync_steam_help_backgrounds() -> None:
 def start_steam_background_sync() -> None:
     """启动不阻断 Core 启动流程的后台背景更新任务。"""
     task = asyncio.create_task(sync_steam_help_backgrounds(), name="calabiyau_help_bg_sync")
-    _background_tasks.add(task)
-    task.add_done_callback(_on_sync_done)
-
-
-def _on_sync_done(task: asyncio.Task[None]) -> None:
-    _background_tasks.discard(task)
-    if task.cancelled():
-        return
-    error = task.exception()
-    if error is not None:
-        logger.warning(f"{_LOG_TAG} 后台更新帮助背景异常：{error!r}")
+    track_background_task(task, log_tag=_LOG_TAG, error_label="后台更新帮助背景异常")
 
 
 @to_thread

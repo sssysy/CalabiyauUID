@@ -180,7 +180,7 @@
                 "need_admin": false
             },
             {
-                "name": "团竟排行",
+                "name": "团竞排行",
                 "desc": "查看团队乱斗榜前 50 名",
                 "eg": "团队排行",
                 "highlight": 0,

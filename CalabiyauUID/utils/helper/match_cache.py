@@ -1,6 +1,5 @@
 """对局详情（阵容）与回放统计的内存 LRU + 本地磁盘两级缓存。"""
 
-import os
 import re
 import json
 import time
@@ -21,13 +20,11 @@ from ..api.dakanu import (
     is_match_detail_response,
     fetch_match_statistics_payload,
 )
-from ..utils.cache import AsyncTtlCache
+from ..utils.cache import AsyncTtlCache, touch_cache_mtime
 from ..utils.paths import MATCH_STATS_CACHE_DIR, MATCH_DETAIL_CACHE_DIR
 
 _DETAIL_MEMORY_MAXSIZE = 256
-_DETAIL_DISK_MAX_FILES = 300
 _STATS_MEMORY_MAXSIZE = 64
-_STATS_DISK_MAX_FILES = 100
 
 _RANK_BOMB_RE = re.compile(r"(?:^|[_\s])RANK_BOMB(?:$|[_\s])", re.IGNORECASE)
 _CAMP_ID_RE = re.compile(r"^RoomCamp_CAMP_\d+$")
@@ -172,13 +169,6 @@ def _retarget_match_detail(detail: DakanuMatchDetail, player_id: str | None) -> 
     return updated
 
 
-def _touch_mtime(path: Path) -> None:
-    try:
-        os.utime(path, None)
-    except OSError:
-        pass
-
-
 def _safe_unlink(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
@@ -186,29 +176,7 @@ def _safe_unlink(path: Path) -> None:
         pass
 
 
-def _prune_disk_dir(directory: Path, max_files: int) -> None:
-    if not directory.is_dir():
-        return
-    entries: list[tuple[float, Path]] = []
-    try:
-        for item in directory.iterdir():
-            if not item.is_file() or item.suffix != ".json":
-                continue
-            try:
-                entries.append((item.stat().st_mtime, item))
-            except OSError:
-                continue
-    except OSError:
-        return
-    excess = len(entries) - max_files
-    if excess <= 0:
-        return
-    entries.sort(key=lambda pair: pair[0])
-    for _, stale_path in entries[:excess]:
-        _safe_unlink(stale_path)
-
-
-def _atomic_write_text(target: Path, content: str, max_files: int) -> None:
+def _atomic_write_text(target: Path, content: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f"{target.name}.{time.monotonic_ns()}.tmp")
     try:
@@ -218,7 +186,6 @@ def _atomic_write_text(target: Path, content: str, max_files: int) -> None:
         logger.warning(f"[卡拉彼丘·对局缓存] 写入缓存文件 {target.name} 失败：{exc}")
         _safe_unlink(temp)
         return
-    _prune_disk_dir(target.parent, max_files)
 
 
 def _read_detail_from_disk_sync(room_id: str, match_mode: str | None) -> DakanuMatchDetail | None:
@@ -238,7 +205,7 @@ def _read_detail_from_disk_sync(room_id: str, match_mode: str | None) -> DakanuM
     if not is_match_detail_response(detail_obj) or not _is_cacheable_match_detail(detail_obj, room_id, match_mode):
         _safe_unlink(path)
         return None
-    _touch_mtime(path)
+    touch_cache_mtime(path)
     return detail_obj
 
 
@@ -249,7 +216,7 @@ def _write_detail_to_disk_sync(room_id: str, detail: DakanuMatchDetail) -> None:
         "detail": detail,
     }
     serialized = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
-    _atomic_write_text(path, serialized, _DETAIL_DISK_MAX_FILES)
+    _atomic_write_text(path, serialized)
 
 
 def _read_stats_from_disk_sync(room_id: str, region: str) -> DakanuMatchStatistics | None:
@@ -266,13 +233,13 @@ def _read_stats_from_disk_sync(room_id: str, region: str) -> DakanuMatchStatisti
     if parsed is None or parsed.room_id != room_id:
         _safe_unlink(path)
         return None
-    _touch_mtime(path)
+    touch_cache_mtime(path)
     return parsed
 
 
 def _write_stats_to_disk_sync(room_id: str, region: str, raw_json: str) -> None:
     path = match_stats_cache_path(room_id, region)
-    _atomic_write_text(path, raw_json, _STATS_DISK_MAX_FILES)
+    _atomic_write_text(path, raw_json)
 
 
 async def get_match_detail(

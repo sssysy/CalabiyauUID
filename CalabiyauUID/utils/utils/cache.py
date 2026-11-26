@@ -1,10 +1,79 @@
-"""通用异步 LRU/TTL 内存缓存，支持按 key 合并在途请求。"""
+"""通用异步 LRU/TTL 内存缓存、按 key 锁池与磁盘缓存保活工具。"""
 
+import os
 import time
 import asyncio
+from typing import Protocol
+from pathlib import Path
+from weakref import WeakSet
+from contextlib import asynccontextmanager
 from collections import OrderedDict
 from dataclasses import dataclass
-from collections.abc import Callable, Hashable, Awaitable
+from collections.abc import Callable, Hashable, Awaitable, AsyncIterator
+
+
+class ManagedMemoryCache(Protocol):
+    """由统一缓存中心管理过期回收与关机收尾的内存缓存协议。"""
+
+    def purge_expired(self) -> int: ...
+    async def close(self) -> None: ...
+
+
+_registered_caches: WeakSet[ManagedMemoryCache] = WeakSet()
+
+
+def purge_registered_memory_caches() -> int:
+    """主动清理所有已登记内存缓存中的过期条目，返回移除总数。"""
+    removed = 0
+    for cache in list(_registered_caches):
+        removed += cache.purge_expired()
+    return removed
+
+
+async def close_registered_memory_caches() -> None:
+    """关闭所有已登记内存缓存，取消在途加载任务并清空缓存。"""
+    for cache in list(_registered_caches):
+        await cache.close()
+
+
+def touch_cache_mtime(path: Path, *, min_interval_seconds: float = 3600.0) -> None:
+    """节流更新缓存文件修改时间，避免高频命中时反复写磁盘元数据。"""
+    try:
+        mtime = path.stat().st_mtime
+        if min_interval_seconds <= 0 or (time.time() - mtime) >= min_interval_seconds:
+            os.utime(path, None)
+    except OSError:
+        pass
+
+
+@dataclass(slots=True)
+class _KeyedLockEntry:
+    lock: asyncio.Lock
+    waiters: int = 0
+
+
+class KeyedLockPool[KeyT: Hashable]:
+    """按 key 隔离的异步锁池，无等待协程时立即回收条目。"""
+
+    def __init__(self) -> None:
+        self._entries: dict[KeyT, _KeyedLockEntry] = {}
+
+    @asynccontextmanager
+    async def acquire(self, key: KeyT) -> AsyncIterator[None]:
+        if key not in self._entries:
+            self._entries[key] = _KeyedLockEntry(lock=asyncio.Lock())
+        entry = self._entries[key]
+        entry.waiters += 1
+        try:
+            async with entry.lock:
+                yield
+        finally:
+            entry.waiters -= 1
+            if entry.waiters <= 0 and key in self._entries and self._entries[key] is entry:
+                del self._entries[key]
+
+    def __len__(self) -> int:
+        return len(self._entries)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +99,7 @@ class AsyncTtlCache[KeyT: Hashable, ValueT]:
         self._ttl_seconds = ttl_seconds
         self._entries: OrderedDict[KeyT, _CacheEntry[ValueT]] = OrderedDict()
         self._inflight: dict[KeyT, asyncio.Task[ValueT]] = {}
+        _registered_caches.add(self)
 
     def _is_expired(self, entry: _CacheEntry[ValueT], now: float) -> bool:
         return entry.expires_at is not None and now >= entry.expires_at
@@ -64,6 +134,23 @@ class AsyncTtlCache[KeyT: Hashable, ValueT]:
 
     def clear(self) -> None:
         self._entries.clear()
+
+    def purge_expired(self) -> int:
+        now = time.monotonic()
+        expired_keys = [key for key, entry in self._entries.items() if self._is_expired(entry, now)]
+        for key in expired_keys:
+            del self._entries[key]
+        return len(expired_keys)
+
+    async def close(self) -> None:
+        tasks = list(self._inflight.values())
+        self._inflight.clear()
+        self._entries.clear()
+        pending = [task for task in tasks if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def get_or_load(
         self,

@@ -1,6 +1,5 @@
 import re
 import json
-import time
 import asyncio
 from typing import TypedDict, TypeGuard, NotRequired
 from dataclasses import dataclass
@@ -10,6 +9,8 @@ import httpx
 
 from gsuid_core.pool import to_thread
 from gsuid_core.logger import logger
+
+from ..utils.cache import AsyncTtlCache
 
 BASE_URL = "https://www.dakanu.com"
 _REFRESH_POLL_INTERVAL = 1.5
@@ -1024,8 +1025,14 @@ class DakanuRolesRankingBoard(TypedDict):
 
 
 _META_CACHE_TTL_SECONDS = 300.0
-_meta_roles_cache: tuple[float, dict[int, str]] | None = None
-_ranking_seasons_cache: tuple[float, DakanuRankingSeasons] | None = None
+_meta_roles_cache: AsyncTtlCache[str, dict[int, str]] = AsyncTtlCache(
+    maxsize=1,
+    ttl_seconds=_META_CACHE_TTL_SECONDS,
+)
+_ranking_seasons_cache: AsyncTtlCache[str, DakanuRankingSeasons] = AsyncTtlCache(
+    maxsize=1,
+    ttl_seconds=_META_CACHE_TTL_SECONDS,
+)
 
 
 def _as_int(value: object) -> int | None:
@@ -1388,10 +1395,6 @@ def _parse_ranking_seasons(payload: object) -> DakanuRankingSeasons | None:
 
 @to_thread
 def _fetch_ranking_seasons_sync() -> DakanuRankingSeasons:
-    global _ranking_seasons_cache
-    now = time.monotonic()
-    if _ranking_seasons_cache is not None and now < _ranking_seasons_cache[0]:
-        return _ranking_seasons_cache[1]
     try:
         with httpx.Client(timeout=20.0, follow_redirects=True) as client:
             response = client.get(f"{BASE_URL}/api/rankings/seasons")
@@ -1414,13 +1417,12 @@ def _fetch_ranking_seasons_sync() -> DakanuRankingSeasons:
     if parsed is None:
         logger.warning("[卡拉彼丘·赛季查询] 赛季列表响应结构异常")
         raise DakanuError("赛季列表格式异常，请稍后再试。")
-    _ranking_seasons_cache = (time.monotonic() + _META_CACHE_TTL_SECONDS, parsed)
     return parsed
 
 
 async def fetch_ranking_seasons() -> DakanuRankingSeasons:
     """读取 Dakanu `/api/rankings/seasons` 赛季目录，带 5 分钟内存缓存。"""
-    return await _fetch_ranking_seasons_sync()
+    return await _ranking_seasons_cache.get_or_load("default", _fetch_ranking_seasons_sync)
 
 
 def _parse_season_rank_point(raw: object) -> DakanuSeasonRankPoint:
@@ -1835,12 +1837,7 @@ def _fetch_meta_roles_sync() -> dict[int, str]:
 
 async def fetch_meta_roles() -> dict[int, str]:
     """读取 Dakanu 角色 ID 到中文名映射，带 5 分钟内存缓存。"""
-    global _meta_roles_cache
-    now = time.monotonic()
-    if _meta_roles_cache is not None and now < _meta_roles_cache[0]:
-        return dict(_meta_roles_cache[1])
-    roles = await _fetch_meta_roles_sync()
-    _meta_roles_cache = (time.monotonic() + _META_CACHE_TTL_SECONDS, roles)
+    roles = await _meta_roles_cache.get_or_load("default", _fetch_meta_roles_sync)
     return dict(roles)
 
 

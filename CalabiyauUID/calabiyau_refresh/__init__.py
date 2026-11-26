@@ -7,7 +7,7 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 
 from .refresh_services import refresh_and_report, resolve_refresh_uid
-from ..utils.helper.refresh import track_background
+from ..utils.utils.background import track_background_task
 
 sv_refresh = SV("卡拉彼丘数据刷新")
 
@@ -39,4 +39,4 @@ async def calabiyau_refresh_data(bot: Bot, ev: Event) -> None:
         return
     await bot.send(f"已开始刷新 UID {player_id} 的战绩，通常需要 10～30 秒。\n完成后会在这个会话提醒你。")
     task = asyncio.create_task(refresh_and_report(bot, ev, player_id))
-    track_background(task)
+    track_background_task(task)

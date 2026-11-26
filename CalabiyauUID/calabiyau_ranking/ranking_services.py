@@ -1,6 +1,5 @@
 """排行榜数据拉取、角色解析、素材加载与卡片构建服务。"""
 
-import time
 import asyncio
 from typing import Literal
 from pathlib import Path
@@ -26,6 +25,7 @@ from ..utils.api.dakanu import (
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import resolve_role_name, resolve_role_alias, get_role_display_names
+from ..utils.utils.cache import AsyncTtlCache
 from ..utils.helper.assets import (
     image_data_uri,
     local_role_image,
@@ -54,15 +54,18 @@ TierMode = Literal["ranked", "challenge", "none"]
 
 @dataclass(frozen=True)
 class _RankingCardCache:
-    expires_at: float
     image: bytes
     summary: str
 
 
-_board_cache_lock = asyncio.Lock()
-_cached_board_cards: dict[tuple[int, int | None, int], _RankingCardCache] = {}
-_roles_cache_lock = asyncio.Lock()
-_cached_roles_cards: dict[tuple[RolesSortBy, bool], _RankingCardCache] = {}
+_board_card_cache: AsyncTtlCache[tuple[int, int | None, int], _RankingCardCache] = AsyncTtlCache(
+    maxsize=64,
+    ttl_seconds=_CACHE_TTL_SECONDS,
+)
+_roles_card_cache: AsyncTtlCache[tuple[RolesSortBy, bool], _RankingCardCache] = AsyncTtlCache(
+    maxsize=16,
+    ttl_seconds=_CACHE_TTL_SECONDS,
+)
 
 
 def _read_existing_image_uri(path: Path) -> str:
@@ -360,13 +363,8 @@ async def build_board_ranking_card(
     """拉取指定类型的排行榜前 50 名并渲染卡片，带 30 秒短时内存缓存。"""
     season_id = season.season_id if season is not None and not season.current else 0
     cache_key = (rank_type, sub_type, season_id)
-    async with _board_cache_lock:
-        now = time.monotonic()
-        if use_cache and cache_key in _cached_board_cards and now < _cached_board_cards[cache_key].expires_at:
-            cached = _cached_board_cards[cache_key]
-            emit_ai_text(cached.summary)
-            return cached.image
 
+    async def _load() -> _RankingCardCache:
         board, floor, season_label = await _fetch_ranking_bundle(
             rank_type,
             sub_type=sub_type,
@@ -375,7 +373,6 @@ async def build_board_ranking_card(
         )
         tier_mode = _tier_mode_for_rank_type(rank_type)
         summary = _format_board_ranking_ai_summary(board, floor, season_label, tier_mode, title_override)
-        emit_ai_text(summary)
         assets = await _build_assets(board, tier_mode)
         image = await render_ranking_card(
             board,
@@ -386,12 +383,11 @@ async def build_board_ranking_card(
             title_override=title_override,
             is_historical_season=season_id > 0,
         )
-        _cached_board_cards[cache_key] = _RankingCardCache(
-            expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
-            image=image,
-            summary=summary,
-        )
-        return image
+        return _RankingCardCache(image=image, summary=summary)
+
+    cached = await _board_card_cache.get_or_load(cache_key, _load, use_cache=use_cache)
+    emit_ai_text(cached.summary)
+    return cached.image
 
 
 async def build_roles_ranking_card(
@@ -402,20 +398,14 @@ async def build_roles_ranking_card(
 ) -> bytes:
     """拉取角色胜率与出场率排行并渲染卡片，带 30 秒短时内存缓存。"""
     cache_key = (sort_by, ranked_only)
-    async with _roles_cache_lock:
-        now = time.monotonic()
-        if use_cache and cache_key in _cached_roles_cards and now < _cached_roles_cards[cache_key].expires_at:
-            cached = _cached_roles_cards[cache_key]
-            emit_ai_text(cached.summary)
-            return cached.image
 
+    async def _load() -> _RankingCardCache:
         board, remote_roles = await asyncio.gather(
             fetch_roles_ranking(ranked_only=ranked_only),
             fetch_meta_roles(),
         )
         role_names = {**remote_roles, **get_role_display_names()}
         summary = _format_roles_ranking_ai_summary(board, role_names, sort_by, ranked_only)
-        emit_ai_text(summary)
         role_ids = {entry["roleId"] for entry in board["entries"]}
         role_images = await _load_role_images(
             role_ids,
@@ -427,9 +417,8 @@ async def build_roles_ranking_card(
             role_images,
             sort_by=sort_by,
         )
-        _cached_roles_cards[cache_key] = _RankingCardCache(
-            expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
-            image=image,
-            summary=summary,
-        )
-        return image
+        return _RankingCardCache(image=image, summary=summary)
+
+    cached = await _roles_card_cache.get_or_load(cache_key, _load, use_cache=use_cache)
+    emit_ai_text(cached.summary)
+    return cached.image

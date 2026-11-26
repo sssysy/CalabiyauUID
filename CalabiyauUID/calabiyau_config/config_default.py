@@ -16,6 +16,12 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "开启后可以解决大文件发送失败的问题，但是要求对应目录位置对协议端可达",
         False,
     ),
+    "CacheCleanDays": GsIntConfig(
+        "定时清理文件（天）",
+        "每小时清理一次超过指定天数未使用的缓存文件；设为 0 则关闭定时清理",
+        3,
+        max_value=365,
+    ),
     "CustomBgPath": GsImageConfig(
         "自定义背景图片",
         "卡片渲染的自定义背景图片，未设置时默认使用赛季高斯模糊背景",

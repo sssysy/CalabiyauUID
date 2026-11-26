@@ -12,6 +12,8 @@ from gsuid_core.logger import logger
 
 from ..api.dakanu import DakanuError, DakanuProfile, fetch_clan, fetch_leisure, refresh_profile
 from .player_data import PlayerSnapshot, has_player_data, load_player_snapshot, save_player_snapshot
+from ..utils.cache import KeyedLockPool
+from ..utils.background import track_background_task
 
 _SNAPSHOT_TTL_SECONDS = 86400
 _AUTO_REFRESH_WAIT_SECONDS = 10.0
@@ -36,21 +38,8 @@ def is_snapshot_expired(snapshot: PlayerSnapshot) -> bool:
     return int(time.time()) - snapshot.saved_at >= _SNAPSHOT_TTL_SECONDS
 
 
-_locks: dict[str, asyncio.Lock] = {}
+_locks: KeyedLockPool[str] = KeyedLockPool()
 _inflight: dict[str, asyncio.Task[RefreshResult]] = {}
-_background_tasks: set[asyncio.Task[object]] = set()
-
-
-def _lock_for(player_id: str) -> asyncio.Lock:
-    if player_id not in _locks:
-        _locks[player_id] = asyncio.Lock()
-    return _locks[player_id]
-
-
-def track_background(task: asyncio.Task[object]) -> None:
-    """持有后台任务强引用，避免事件循环只保留弱引用时被回收。"""
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
 
 
 async def _snapshot_from_profile(player_id: str, profile: DakanuProfile) -> PlayerSnapshot:
@@ -94,8 +83,7 @@ async def _get_or_start_refresh_task(
         cached = None if force else await _load_valid_local_snapshot(player_id)
         return cached, _inflight[player_id]
 
-    lock = _lock_for(player_id)
-    async with lock:
+    async with _locks.acquire(player_id):
         if player_id in _inflight:
             cached = None if force else await _load_valid_local_snapshot(player_id)
             return cached, _inflight[player_id]
@@ -110,7 +98,7 @@ async def _get_or_start_refresh_task(
 
         task = asyncio.create_task(_refresh_uncached(player_id))
         _inflight[player_id] = task
-        track_background(task)
+        track_background_task(task)
 
         def _on_done(finished: asyncio.Task[RefreshResult]) -> None:
             if player_id in _inflight and _inflight[player_id] is finished:
@@ -195,4 +183,4 @@ def schedule_refreshed_card_push(
         await bot.send(image, at_sender=True)
 
     task = asyncio.create_task(_push_when_ready())
-    track_background(task)
+    track_background_task(task)

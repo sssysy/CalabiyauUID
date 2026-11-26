@@ -14,6 +14,8 @@ import httpx
 
 from gsuid_core.logger import logger
 
+from ..utils.cache import AsyncTtlCache
+
 _SIGN_API_BASE = "https://open.fanbook.cn/mp/138519745866498048/368331042878263296/sign/api"
 _SIGN_REFERER = (
     "https://open.fanbook.cn/mp/138519745866498048/368331042878263296/sign/"
@@ -36,8 +38,14 @@ _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
+_SHOP_TOKEN_CACHE_MAXSIZE = 512
+_SHOP_TOKEN_CACHE_TTL_SECONDS = 86400.0
+
 _shop_client_id: str = ""
-_shop_token_cache: dict[str, tuple[str, str]] = {}
+_shop_token_cache: AsyncTtlCache[str, tuple[str, str]] = AsyncTtlCache(
+    maxsize=_SHOP_TOKEN_CACHE_MAXSIZE,
+    ttl_seconds=_SHOP_TOKEN_CACHE_TTL_SECONDS,
+)
 
 
 class FanbookSignError(RuntimeError):
@@ -417,17 +425,20 @@ async def _exchange_shop_token(*, fb_user_id: str, sign_token: str) -> str:
     if not shop_token:
         raise FanbookSignError("Fanbook 积分商城未返回有效的访问令牌。")
     if fb_user_id:
-        _shop_token_cache[fb_user_id] = (sign_token, shop_token)
+        _shop_token_cache.set(fb_user_id, (sign_token, shop_token))
     return shop_token
 
 
 def _get_cached_shop_token(*, fb_user_id: str, sign_token: str) -> str:
-    if not fb_user_id or fb_user_id not in _shop_token_cache:
+    if not fb_user_id:
         return ""
-    cached_sign, cached_bearer = _shop_token_cache[fb_user_id]
+    hit = _shop_token_cache.get(fb_user_id)
+    if hit is None:
+        return ""
+    cached_sign, cached_bearer = hit.value
     if cached_sign == sign_token:
         return cached_bearer
-    _shop_token_cache.pop(fb_user_id, None)
+    _shop_token_cache.delete(fb_user_id)
     return ""
 
 
@@ -461,7 +472,7 @@ async def query_shop_points(*, fb_user_id: str, sign_token: str) -> int:
         if exc.code not in _SHOP_TOKEN_INVALID_CODES:
             raise
         if fb_user_id:
-            _shop_token_cache.pop(fb_user_id, None)
+            _shop_token_cache.delete(fb_user_id)
         shop_token = await _exchange_shop_token(fb_user_id=fb_user_id, sign_token=sign_token)
         info_data = await _fetch_me_info(shop_token=shop_token)
 

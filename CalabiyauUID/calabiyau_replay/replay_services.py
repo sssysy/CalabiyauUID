@@ -1,6 +1,5 @@
 """对局回放下载、缓存复用与发送消息构造。"""
 
-import asyncio
 from pathlib import Path
 
 from gsuid_core.pool import to_thread
@@ -14,8 +13,9 @@ from ..utils.api.dakanu import (
     fetch_replay_download_ticket,
 )
 from ..utils.downloader import download_replay, find_cached_replay
+from ..utils.utils.cache import KeyedLockPool
 
-_room_locks: dict[str, asyncio.Lock] = {}
+_room_locks: KeyedLockPool[str] = KeyedLockPool()
 
 
 def parse_room_id(raw_text: str) -> str | None:
@@ -24,12 +24,6 @@ def parse_room_id(raw_text: str) -> str | None:
     if not is_valid_room_id(cleaned):
         return None
     return cleaned
-
-
-def _get_room_lock(room_id: str) -> asyncio.Lock:
-    if room_id not in _room_locks:
-        _room_locks[room_id] = asyncio.Lock()
-    return _room_locks[room_id]
 
 
 def _format_download_error(room_id: str, status_code: int | None) -> str:
@@ -49,8 +43,7 @@ async def get_cached_replay(room_id: str) -> Path | None:
 
 async def ensure_replay_file(room_id: str) -> Path:
     """优先复用本地缓存，缺失时向 Dakanu 下载回放文件。"""
-    lock = _get_room_lock(room_id)
-    async with lock:
+    async with _room_locks.acquire(room_id):
         cached = await get_cached_replay(room_id)
         if cached is not None:
             return cached

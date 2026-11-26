@@ -1,6 +1,5 @@
 """玩家活跃趋势与世界频道动态数据拉取、素材解析与卡片渲染。"""
 
-import time
 import asyncio
 from pathlib import Path
 from datetime import datetime
@@ -23,6 +22,7 @@ from ..utils.api.dakanu import (
 )
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import get_role_display_names
+from ..utils.utils.cache import AsyncTtlCache
 from ..utils.helper.assets import (
     image_data_uri,
     local_role_image,
@@ -45,16 +45,18 @@ _DOWNLOAD_CONCURRENCY = 8
 
 @dataclass(frozen=True)
 class _CardCache:
-    expires_at: float
     image: bytes
     summary: str
 
 
-_activity_cache_lock = asyncio.Lock()
-_activity_cached_cards: dict[str, _CardCache] = {}
-
-_chat_cache_lock = asyncio.Lock()
-_chat_cached_cards: dict[int, _CardCache] = {}
+_activity_card_cache: AsyncTtlCache[str, _CardCache] = AsyncTtlCache(
+    maxsize=16,
+    ttl_seconds=_CACHE_TTL_SECONDS,
+)
+_chat_card_cache: AsyncTtlCache[int, _CardCache] = AsyncTtlCache(
+    maxsize=16,
+    ttl_seconds=_CACHE_TTL_SECONDS,
+)
 
 
 def _read_image_uri(path: Path) -> str:
@@ -176,23 +178,16 @@ async def build_activity_card(
     use_cache: bool = True,
 ) -> bytes:
     """拉取玩家活跃趋势并渲染卡片，带 60 秒内存缓存。"""
-    async with _activity_cache_lock:
-        now = time.monotonic()
-        if use_cache and range_key in _activity_cached_cards and now < _activity_cached_cards[range_key].expires_at:
-            cached = _activity_cached_cards[range_key]
-            emit_ai_text(cached.summary)
-            return cached.image
 
+    async def _load() -> _CardCache:
         activity = await fetch_game_activity(range_key)
         summary = _format_activity_ai_summary(activity)
-        emit_ai_text(summary)
         image = await render_activity_card(activity)
-        _activity_cached_cards[range_key] = _CardCache(
-            expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
-            image=image,
-            summary=summary,
-        )
-        return image
+        return _CardCache(image=image, summary=summary)
+
+    cached = await _activity_card_cache.get_or_load(range_key, _load, use_cache=use_cache)
+    emit_ai_text(cached.summary)
+    return cached.image
 
 
 async def build_world_chat_card(
@@ -201,17 +196,11 @@ async def build_world_chat_card(
     use_cache: bool = True,
 ) -> bytes:
     """拉取世界频道聚合动态并渲染卡片，带 60 秒内存缓存。"""
-    async with _chat_cache_lock:
-        now = time.monotonic()
-        if use_cache and limit in _chat_cached_cards and now < _chat_cached_cards[limit].expires_at:
-            cached = _chat_cached_cards[limit]
-            emit_ai_text(cached.summary)
-            return cached.image
 
+    async def _load() -> _CardCache:
         aggregate = await fetch_chat_aggregate(limit_per_channel=30)
         recent_msgs = select_recent_messages(aggregate["messages"], limit=limit)
         summary = _format_world_chat_ai_summary(aggregate, recent_msgs)
-        emit_ai_text(summary)
         avatar_ids, role_ids, emote_ids = collect_chat_asset_ids(recent_msgs)
 
         semaphore = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
@@ -228,9 +217,8 @@ async def build_world_chat_card(
             role_names=role_names,
         )
         image = await render_world_chat_card(aggregate, assets, limit=limit)
-        _chat_cached_cards[limit] = _CardCache(
-            expires_at=time.monotonic() + _CACHE_TTL_SECONDS,
-            image=image,
-            summary=summary,
-        )
-        return image
+        return _CardCache(image=image, summary=summary)
+
+    cached = await _chat_card_cache.get_or_load(limit, _load, use_cache=use_cache)
+    emit_ai_text(cached.summary)
+    return cached.image

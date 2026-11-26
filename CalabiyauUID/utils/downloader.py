@@ -5,13 +5,13 @@ from collections.abc import Sequence
 
 import httpx
 
+from gsuid_core.pool import to_thread
 from gsuid_core.utils.download_resource.download_file import download as download_file
 
-from .utils.paths import CACHE_DIR, IMG_CACHE_DIR
+from .utils.cache import touch_cache_mtime
+from .utils.paths import IMG_CACHE_DIR, REPLAY_CACHE_DIR
 
 IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-REPLAY_CACHE_DIR: Path = CACHE_DIR / "replay"
 REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
@@ -35,6 +35,7 @@ async def download_image(url: str) -> Path | None:
         return None
     target = image_cache_path(url)
     if target.is_file() and target.stat().st_size > 0:
+        await to_thread(touch_cache_mtime)(target)
         return target
     retcode = await download_file(url, IMG_CACHE_DIR, target.name, tag="[卡拉彼丘·资源缓存]")
     if retcode != 200 or not target.is_file() or target.stat().st_size <= 0:
@@ -93,6 +94,7 @@ def find_cached_replay(room_id: str) -> Path | None:
     """命中本地非空回放缓存时返回路径，否则返回 None。"""
     target = replay_cache_path(room_id)
     if target.is_file() and target.stat().st_size > 0:
+        touch_cache_mtime(target)
         return target
     return None
 
