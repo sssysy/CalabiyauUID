@@ -178,7 +178,7 @@ async def run_cache_cleanup() -> CacheCleanupReport:
     )
 
 
-@scheduler.scheduled_job("interval", hours=1, id="klbq_cache_cleanup")
+@scheduler.scheduled_job("interval", hours=1, id="klbq_cache_cleanup", replace_existing=True)
 async def scheduled_cache_cleanup() -> None:
     await run_cache_cleanup()
 

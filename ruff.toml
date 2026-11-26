@@ -1,6 +1,15 @@
 line-length = 120
 target-version = "py312"
-exclude = [".git", ".venv", "__pycache__", "build", "dist", "docs"]
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "docs",
+    "pyproject.toml",
+    "**/*.toml",
+]
 
 [lint]
 select = ["E", "F", "I", "W"]

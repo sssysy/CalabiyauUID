@@ -93,7 +93,7 @@ async def calabiyau_unsubscribe_cdkey(bot: Bot, ev: Event) -> None:
     await bot.send(reply)
 
 
-@scheduler.scheduled_job("interval", hours=2, id="klbq_activity_remind_sync")
+@scheduler.scheduled_job("interval", hours=2, id="klbq_activity_remind_sync", replace_existing=True)
 async def scheduled_activity_remind_sync() -> None:
     await run_activity_remind_sync()
 
@@ -103,7 +103,7 @@ async def on_start_activity_remind_sync() -> None:
     schedule_startup_activity_sync()
 
 
-@scheduler.scheduled_job("interval", hours=2, id="klbq_cdkey_remind_sync")
+@scheduler.scheduled_job("interval", hours=2, id="klbq_cdkey_remind_sync", replace_existing=True)
 async def scheduled_cdkey_remind_sync() -> None:
     await run_cdkey_remind_sync()
 

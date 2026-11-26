@@ -29,7 +29,7 @@ async def calabiyau_fanbook_logout(bot: Bot, ev: Event) -> None:
     await logout_fanbook(bot, ev)
 
 
-@scheduler.scheduled_job("interval", hours=12, id="klbq_fanbook_token_refresh")
+@scheduler.scheduled_job("interval", hours=12, id="klbq_fanbook_token_refresh", replace_existing=True)
 async def scheduled_fanbook_token_refresh() -> None:
     await refresh_expiring_fanbook_tokens()
 

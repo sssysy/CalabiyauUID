@@ -59,7 +59,13 @@ async def calabiyau_fanbook_sign_all(bot: Bot, ev: Event) -> None:
     await bot.send(reply, at_sender=bool(ev.group_id))
 
 
-@scheduler.scheduled_job("cron", hour=_SIGN_HOUR, minute=_SIGN_MINUTE, id="klbq_fanbook_daily_sign")
+@scheduler.scheduled_job(
+    "cron",
+    hour=_SIGN_HOUR,
+    minute=_SIGN_MINUTE,
+    id="klbq_fanbook_daily_sign",
+    replace_existing=True,
+)
 async def scheduled_fanbook_daily_sign() -> None:
     await run_scheduled_fanbook_sign()
 
