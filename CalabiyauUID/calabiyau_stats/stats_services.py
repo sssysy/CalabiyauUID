@@ -70,11 +70,22 @@ async def resolve_player_id(ev: Event) -> tuple[str, str | None]:
 
 async def resolve_stats_query(ev: Event) -> tuple[str, ResolvedSeason | None, str | None]:
     """从命令文本中解析可选赛季与查询目标玩家。"""
-    season_token, target_text = split_season_and_target(ev.text)
+    return await resolve_stats_params(ev, ev.text)
+
+
+async def resolve_stats_params(
+    ev: Event,
+    raw_text: str,
+    *,
+    season_token: str = "",
+) -> tuple[str, ResolvedSeason | None, str | None]:
+    """按显式文本与可选赛季解析查询目标，供命令与 AI 工具共用。"""
+    split_season, target_text = split_season_and_target(raw_text)
+    effective_season = season_token.strip() or split_season
     season: ResolvedSeason | None = None
-    if season_token is not None:
+    if effective_season:
         try:
-            season = await resolve_season_query(season_token)
+            season = await resolve_season_query(effective_season)
         except DakanuError as exc:
             return "", None, str(exc)
     player_id, error = await _resolve_target_player_id(ev, target_text)

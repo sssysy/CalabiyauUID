@@ -18,19 +18,6 @@ sv_bind = SV("卡拉彼丘账号绑定")
 @sv_bind.on_command(
     "绑定",
     block=True,
-    to_ai="""绑定卡拉彼丘国服账号并拉取首次战绩快照
-
-    当用户要求绑定卡拉彼丘账号、关联游戏UID或游戏昵称时调用。
-    调用后会验证账号并拉取首次战绩，完成后即可查询战绩总览或历史战绩。
-
-    Args:
-        text: 卡拉彼丘纯数字 UID 或游戏昵称，例如 "1234567" 或 "星绘玩家"
-    """,
-    covers=["卡拉彼丘国服账号绑定、UID/昵称解析及首次战绩快照拉取"],
-    aliases=["卡拉彼丘·绑定账号", "卡拉彼丘·绑定UID"],
-    timeout=120.0,
-    background=True,
-    background_grace=5.0,
 )
 async def calabiyau_bind(bot: Bot, ev: Event) -> None:
     query = ev.text.strip()
@@ -42,10 +29,6 @@ async def calabiyau_bind(bot: Bot, ev: Event) -> None:
         game_uid = await resolve_player_input(query)
     except DakanuError as exc:
         await bot.send(f"绑定失败：{exc}")
-        return
-
-    if type(bot).__name__ == "MockBot":
-        await _bind_and_notify(bot, ev, game_uid)
         return
 
     await bot.send(f"已开始验证 UID {game_uid} 并拉取首次战绩，通常需要 10～30 秒。\n完成后会在这个会话提醒你。")

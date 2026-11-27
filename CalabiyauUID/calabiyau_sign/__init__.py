@@ -25,8 +25,7 @@ _SIGN_HOUR, _SIGN_MINUTE = parse_sign_time()
 
 @sv_fanbook_sign.on_fullmatch("签到", block=True)
 async def calabiyau_fanbook_sign(bot: Bot, ev: Event) -> None:
-    if type(bot).__name__ != "MockBot":
-        await bot.send("[卡丘] 开始签到任务，请稍后......", at_sender=bool(ev.group_id))
+    await bot.send("[卡丘] 开始签到任务，请稍后......", at_sender=bool(ev.group_id))
     reply = await run_manual_fanbook_sign(ev.bot_id, ev.user_id)
     await bot.send(reply, at_sender=bool(ev.group_id))
 
@@ -53,8 +52,7 @@ async def calabiyau_fanbook_auto_sign_off(bot: Bot, ev: Event) -> None:
 
 @sv_fanbook_sign_all.on_fullmatch("全部签到", block=True)
 async def calabiyau_fanbook_sign_all(bot: Bot, ev: Event) -> None:
-    if type(bot).__name__ != "MockBot":
-        await bot.send("[卡丘] 开始全部签到任务，请稍后......", at_sender=bool(ev.group_id))
+    await bot.send("[卡丘] 开始全部签到任务，请稍后......", at_sender=bool(ev.group_id))
     reply = await run_all_fanbook_sign(ev)
     await bot.send(reply, at_sender=bool(ev.group_id))
 

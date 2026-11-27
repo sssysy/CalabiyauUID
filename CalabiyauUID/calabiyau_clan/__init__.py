@@ -38,7 +38,7 @@ sv_clan = SV("卡拉彼丘战队")
 async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
     resolved = await resolve_clan_target_with_refresh(
         ev,
-        allow_stale_fallback=type(bot).__name__ != "MockBot",
+        allow_stale_fallback=True,
     )
     if resolved.error is not None or resolved.clan is None:
         await bot.send(resolved.error or "未能解析目标战队。")

@@ -42,8 +42,7 @@ async def calabiyau_replay_download(bot: Bot, ev: Event) -> None:
 
     replay_path = await get_cached_replay(room_id)
     if replay_path is None:
-        if type(bot).__name__ != "MockBot":
-            await bot.send(f"正在下载对局 {room_id} 的回放文件，请稍候...")
+        await bot.send(f"正在下载对局 {room_id} 的回放文件，请稍候...")
         try:
             replay_path = await ensure_replay_file(room_id)
         except DakanuError as exc:
