@@ -23,6 +23,12 @@ from ..utils.api.fanbook_sign import (
     query_shop_points,
     perform_daily_sign,
 )
+from ..utils.helper.fanbook_auth import (
+    prepare_fanbook_account,
+    is_fanbook_account_expired,
+    ensure_valid_fanbook_account,
+    mark_fanbook_account_revoked,
+)
 from ..utils.database.model_fanbook import CalabiyauFanbookUser
 from ..utils.helper.subscribe_common import (
     DEFAULT_SEND_INTERVAL_SECONDS,
@@ -39,11 +45,12 @@ from ..utils.render.html.renderer.fanbook_auto_sign_card import (
 SIGN_SUBSCRIBE_TASK_NAME = "订阅卡丘Fanbook签到"
 _LOG_TAG = "[卡拉彼丘·Fanbook签到]"
 _BEIJING_TZ = timezone(timedelta(hours=8))
-_REVOKED_EXPIRE_TS = 1
 _DEFAULT_SIGN_HOUR = 0
 _DEFAULT_SIGN_MINUTE = 5
 _STARTUP_SIGN_JOB_ID = "klbq_fanbook_sign_startup"
 _STARTUP_SIGN_DELAY = timedelta(seconds=45)
+_TOKEN_EXPIRED_GUIDE = "请发送 kq刷新令牌 尝试续期，失败请发送 kq登录 重新登录。"
+_TOKEN_EXPIRED_SHORT = "凭证已失效，请发送 kq刷新令牌 续期或 kq登录 重登"
 
 _batch_sign_lock = asyncio.Lock()
 
@@ -162,27 +169,21 @@ def _format_sign_result(account: CalabiyauFanbookUser, result: FanbookSignResult
     return "\n".join(lines)
 
 
-def _is_account_expired(account: CalabiyauFanbookUser, now_ts: int) -> bool:
-    if account.expire_at_ts == _REVOKED_EXPIRE_TS:
-        return True
-    return account.expire_at_ts > 0 and account.expire_at_ts <= now_ts
-
-
 async def _get_active_fanbook_account(
     bot_id: str,
     user_id: str,
     *,
     header: str,
 ) -> tuple[CalabiyauFanbookUser | None, str]:
-    account = await CalabiyauFanbookUser.get_account(bot_id, user_id)
-    if account is None or not account.sign:
+    checked = await ensure_valid_fanbook_account(bot_id, user_id)
+    if checked.status == "not_logged_in" or checked.account is None:
         return None, f"{header}\n⚠️ 尚未登录 Fanbook\n请先发送 kq登录 完成登录。"
-    if _is_account_expired(account, int(time.time())):
+    if checked.status == "expired":
         return (
             None,
-            f"{header}\n⚠️ Fanbook 登录凭证已过期\n账号：{_format_account_name(account)}\n请发送 kq登录 重新登录。",
+            f"{header}\n⚠️ Fanbook 登录凭证已过期\n账号：{_format_account_name(checked.account)}\n{_TOKEN_EXPIRED_GUIDE}",
         )
-    return account, ""
+    return checked.account, ""
 
 
 async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: str) -> UserSignReport:
@@ -193,7 +194,14 @@ async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: st
             sign_token=account.sign,
         )
     except FanbookSignError as exc:
-        error_msg = f"签到失败：{exc}"
+        if exc.is_auth_error:
+            await mark_fanbook_account_revoked(account)
+            text_reason = f"登录凭证已失效，{_TOKEN_EXPIRED_GUIDE}"
+            short_reason = _TOKEN_EXPIRED_SHORT
+        else:
+            text_reason = str(exc)
+            short_reason = str(exc)
+        error_msg = f"签到失败：{short_reason}"
         await CalabiyauFanbookSign.record_outcome(
             bot_id=account.bot_id,
             user_id=account.user_id,
@@ -205,9 +213,9 @@ async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: st
             bot_id=account.bot_id,
             user_id=account.user_id,
             success=False,
-            text=(f"[卡拉彼丘社区签到]\n❌ 签到失败！\n账号：{_format_account_name(account)}\n原因：{exc}"),
+            text=(f"[卡拉彼丘社区签到]\n❌ 签到失败！\n账号：{_format_account_name(account)}\n原因：{text_reason}"),
             failure_label=_format_failure_label(account),
-            error_reason=str(exc),
+            error_reason=short_reason,
         )
 
     message = _format_sign_result(account, result)
@@ -228,6 +236,30 @@ async def _execute_sign_for_account(account: CalabiyauFanbookUser, today_str: st
         success=True,
         text=message,
     )
+
+
+async def _prepare_and_execute_sign(account: CalabiyauFanbookUser, today_str: str) -> UserSignReport:
+    checked = await prepare_fanbook_account(account)
+    if checked.status != "ok" or checked.account is None:
+        await CalabiyauFanbookSign.record_outcome(
+            bot_id=account.bot_id,
+            user_id=account.user_id,
+            sign_date=today_str,
+            status="failed",
+            msg=f"签到失败：{_TOKEN_EXPIRED_SHORT}",
+        )
+        return UserSignReport(
+            bot_id=account.bot_id,
+            user_id=account.user_id,
+            success=False,
+            text=(
+                f"[卡拉彼丘社区签到]\n❌ 签到失败！\n账号：{_format_account_name(account)}\n"
+                f"原因：登录凭证已过期，{_TOKEN_EXPIRED_GUIDE}"
+            ),
+            failure_label=_format_failure_label(account),
+            error_reason=_TOKEN_EXPIRED_SHORT,
+        )
+    return await _execute_sign_for_account(checked.account, today_str)
 
 
 async def run_manual_fanbook_sign(bot_id: str, user_id: str) -> str:
@@ -254,6 +286,9 @@ async def query_fanbook_points(bot_id: str, user_id: str) -> str:
             sign_token=account.sign,
         )
     except FanbookSignError as exc:
+        if exc.is_auth_error:
+            await mark_fanbook_account_revoked(account)
+            return f"{header}\n❌ 查询失败！\n账号：{account_name}\n原因：登录凭证已失效，{_TOKEN_EXPIRED_GUIDE}"
         return f"{header}\n❌ 查询失败！\n账号：{account_name}\n原因：{exc}"
 
     return "\n".join(
@@ -383,7 +418,7 @@ async def run_all_fanbook_sign(ev: Event) -> list[Message] | str:
     async with _batch_sign_lock:
         accounts = await CalabiyauFanbookUser.list_accounts()
         now_ts = int(time.time())
-        targets = [account for account in accounts if account.sign and not _is_account_expired(account, now_ts)]
+        targets = [account for account in accounts if account.sign and not is_fanbook_account_expired(account, now_ts)]
         if not targets:
             return "当前暂无有效的已登录 Fanbook 账号。"
 
@@ -393,7 +428,7 @@ async def run_all_fanbook_sign(ev: Event) -> list[Message] | str:
 
         async def _sign_one(target: CalabiyauFanbookUser) -> UserSignReport:
             async with semaphore:
-                return await _execute_sign_for_account(target, today_str)
+                return await _prepare_and_execute_sign(target, today_str)
 
         reports = list(await asyncio.gather(*(_sign_one(target) for target in targets)))
         failures = tuple(
@@ -455,7 +490,7 @@ async def run_scheduled_fanbook_sign(*, apply_jitter: bool = True) -> None:
 
         targets: list[CalabiyauFanbookUser] = []
         for account in accounts:
-            if not account.sign or _is_account_expired(account, now_ts):
+            if not account.sign or is_fanbook_account_expired(account, now_ts):
                 continue
             user_key = (account.bot_id, account.user_id)
             if not sign_all and user_key not in auto_keys:
@@ -473,7 +508,7 @@ async def run_scheduled_fanbook_sign(*, apply_jitter: bool = True) -> None:
 
         async def _sign_one(target: CalabiyauFanbookUser) -> UserSignReport:
             async with semaphore:
-                return await _execute_sign_for_account(target, today_str)
+                return await _prepare_and_execute_sign(target, today_str)
 
         reports = list(await asyncio.gather(*(_sign_one(target) for target in targets)))
         ok_count = sum(1 for report in reports if report.success)

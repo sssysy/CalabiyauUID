@@ -71,6 +71,15 @@
                 "need_admin": false
             },
             {
+                "name": "刷新令牌",
+                "desc": "手动尝试续期当前已保存的 Fanbook 登录令牌",
+                "eg": "刷新令牌",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "签到",
                 "desc": "手动执行一次 Fanbook 卡拉彼丘社区每日签到",
                 "eg": "签到",

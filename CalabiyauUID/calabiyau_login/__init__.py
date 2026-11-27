@@ -1,16 +1,13 @@
 """卡拉彼丘 Fanbook 登录与登出命令。"""
 
 from gsuid_core.sv import SV
-from gsuid_core.aps import scheduler
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
-from gsuid_core.server import on_core_start
 
 from . import login_router
 from .login_common import (
     logout_fanbook,
-    refresh_expiring_fanbook_tokens,
-    schedule_startup_fanbook_refresh,
+    refresh_fanbook_token,
 )
 from .web_login_services import request_fanbook_login
 from .qrcode_login_services import request_fanbook_qrcode_login
@@ -35,11 +32,6 @@ async def calabiyau_fanbook_logout(bot: Bot, ev: Event) -> None:
     await logout_fanbook(bot, ev)
 
 
-@scheduler.scheduled_job("interval", hours=12, id="klbq_fanbook_token_refresh", replace_existing=True)
-async def scheduled_fanbook_token_refresh() -> None:
-    await refresh_expiring_fanbook_tokens()
-
-
-@on_core_start
-async def on_start_fanbook_token_refresh() -> None:
-    schedule_startup_fanbook_refresh()
+@sv_fanbook_login.on_fullmatch("刷新令牌", block=True)
+async def calabiyau_fanbook_refresh_token(bot: Bot, ev: Event) -> None:
+    await refresh_fanbook_token(bot, ev)

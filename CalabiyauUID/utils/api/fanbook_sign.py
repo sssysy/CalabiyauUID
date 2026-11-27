@@ -52,9 +52,16 @@ _shop_token_cache: AsyncTtlCache[str, tuple[str, str]] = AsyncTtlCache(
 class FanbookSignError(RuntimeError):
     """Fanbook 签到小程序接口调用或业务失败。"""
 
-    def __init__(self, message: str, *, code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int | None = None,
+        is_auth_error: bool = False,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.is_auth_error = is_auth_error
 
 
 def _coerce_int(value: Any) -> int:
@@ -242,9 +249,11 @@ async def _request_mp_api(
     envelope = _parse_envelope(response, service_name=service_name, path=path)
     if response.status_code == 401:
         err_code = envelope.code if envelope is not None and envelope.code is not None else 401
-        err_msg = (envelope.msg if envelope is not None else "") or "Fanbook 登录凭证已过期，请重新 kq登录。"
+        err_msg = (
+            envelope.msg if envelope is not None else ""
+        ) or "Fanbook 登录凭证已过期，请发送 kq刷新令牌 尝试续期，失败请发送 kq登录 重新登录。"
         logger.warning(f"{_LOG_TAG} {service_name} {path} 鉴权失败（HTTP 401, code={err_code}）：{err_msg}")
-        raise FanbookSignError(err_msg, code=err_code)
+        raise FanbookSignError(err_msg, code=err_code, is_auth_error=True)
 
     if response.status_code >= 400:
         logger.warning(f"{_LOG_TAG} 请求 {service_name} {path} 返回 HTTP {response.status_code}")
@@ -410,8 +419,12 @@ async def _exchange_shop_token(*, fb_user_id: str, sign_token: str) -> str:
             payload={"clientId": client_id, "userToken": sign_token},
         )
     except FanbookSignError as exc:
-        if exc.code in _SHOP_TOKEN_INVALID_CODES:
-            raise FanbookSignError("Fanbook 登录凭证已过期，请发送 kq登录 重新登录。", code=401) from exc
+        if exc.is_auth_error or exc.code in _SHOP_TOKEN_INVALID_CODES:
+            raise FanbookSignError(
+                "Fanbook 登录凭证已过期，请发送 kq刷新令牌 尝试续期，失败请发送 kq登录 重新登录。",
+                code=401,
+                is_auth_error=True,
+            ) from exc
         raise
 
     try:
@@ -469,7 +482,7 @@ async def query_shop_points(*, fb_user_id: str, sign_token: str) -> int:
     try:
         info_data = await _fetch_me_info(shop_token=shop_token)
     except FanbookSignError as exc:
-        if exc.code not in _SHOP_TOKEN_INVALID_CODES:
+        if not exc.is_auth_error and exc.code not in _SHOP_TOKEN_INVALID_CODES:
             raise
         if fb_user_id:
             _shop_token_cache.delete(fb_user_id)

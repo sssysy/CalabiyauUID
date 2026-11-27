@@ -99,9 +99,18 @@ _FBE_TABLE: dict[str, str] = {
 class FanbookError(RuntimeError):
     """Fanbook Web 接口请求或业务校验失败。"""
 
-    def __init__(self, message: str, *, code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int | None = None,
+        is_auth_error: bool = False,
+        is_transient: bool = False,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.is_auth_error = is_auth_error
+        self.is_transient = is_transient
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,14 +303,17 @@ async def _post_fanbook_api(
             response = await client.post(url, content=request_body.encode("utf-8"), headers=headers)
     except httpx.HTTPError as exc:
         logger.warning(f"{_LOG_TAG} 请求 {path} 网络异常：{exc}")
-        raise FanbookError("Fanbook 服务连接失败，请稍后重试。") from exc
+        raise FanbookError("Fanbook 服务连接失败，请稍后重试。", is_transient=True) from exc
 
     if response.status_code >= 500:
         logger.warning(f"{_LOG_TAG} 请求 {path} 返回 HTTP {response.status_code}")
-        raise FanbookError("Fanbook 服务暂时不可用，请稍后重试。")
+        raise FanbookError("Fanbook 服务暂时不可用，请稍后重试。", is_transient=True)
     if response.status_code >= 400:
         logger.warning(f"{_LOG_TAG} 请求 {path} 返回 HTTP {response.status_code}")
-        raise FanbookError(f"Fanbook 请求被拒绝（HTTP {response.status_code}）。")
+        raise FanbookError(
+            f"Fanbook 请求被拒绝（HTTP {response.status_code}）。",
+            is_auth_error=response.status_code in (401, 403),
+        )
 
     try:
         raw_payload: Any = response.json()
@@ -316,7 +328,11 @@ async def _post_fanbook_api(
 
     if envelope.code not in (1000, 200) and envelope.status is not True:
         logger.warning(f"{_LOG_TAG} 接口 {path} 业务失败 code={envelope.code} desc={envelope.error_message}")
-        raise FanbookError(envelope.error_message, code=envelope.code)
+        raise FanbookError(
+            envelope.error_message,
+            code=envelope.code,
+            is_auth_error=envelope.code in (1042, 1043),
+        )
 
     return envelope, response.headers
 

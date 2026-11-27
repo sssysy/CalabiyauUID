@@ -1,11 +1,10 @@
 """卡拉彼丘账号绑定、解绑、查看与切换。"""
 
-import time
-
 from ..utils.helper.refresh import refresh_player_data
 from ..utils.api.dakanu.client import DakanuError
 from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import CalabiyauBind
+from ..utils.helper.fanbook_auth import is_fanbook_account_expired
 from ..utils.helper.player_resolve import is_numeric_uid, resolve_player_input
 from ..utils.database.model_fanbook import CalabiyauFanbookUser
 
@@ -127,8 +126,8 @@ def _format_fanbook_status(fanbook_user: CalabiyauFanbookUser | None) -> str:
         return "Fanbook 登录状态：未登录（发送 kq登录 进行登录）"
     display_id = fanbook_user.fb_short_id if fanbook_user.fb_short_id else fanbook_user.fb_user_id
     identity = f"{fanbook_user.nickname}（ID: {display_id}）" if fanbook_user.nickname else f"ID: {display_id}"
-    if fanbook_user.expire_at_ts > 0 and fanbook_user.expire_at_ts <= int(time.time()):
-        return f"Fanbook 登录状态：凭证已过期（{identity}，请发送 kq登录 重新登录）"
+    if is_fanbook_account_expired(fanbook_user):
+        return f"Fanbook 登录状态：凭证已过期（{identity}，请发送 kq刷新令牌 续期或 kq登录 重新登录）"
     return f"Fanbook 登录状态：已登录（{identity}）"
 
 
