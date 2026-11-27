@@ -16,7 +16,7 @@ from .ranking_services import (
     resolve_role_board_query,
     build_role_board_usage_message,
 )
-from ..utils.api.dakanu import DakanuError
+from ..utils.api.dakanu.client import DakanuError
 
 sv_ranking = SV("卡拉彼丘排行")
 

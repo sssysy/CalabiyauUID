@@ -1,18 +1,9 @@
 """战绩总览的账号解析、本地快照读取与渲染编排。"""
 
-import base64
 import asyncio
 
 from gsuid_core.models import Event
 
-from ..utils.api.dakanu import (
-    DakanuError,
-    DakanuProfile,
-    DakanuPlayerSeason,
-    role_image_url,
-    avatar_image_url,
-    fetch_player_season,
-)
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import resolve_map
 from ..utils.helper.assets import (
@@ -20,6 +11,7 @@ from ..utils.helper.assets import (
     local_tier_image,
     local_frame_image,
     local_avatar_image,
+    read_image_data_uri,
     local_map_slug_image,
     local_baseplate_image,
     local_frame_index_image,
@@ -33,10 +25,14 @@ from ..utils.helper.season import (
 )
 from ..utils.helper.refresh import ensure_player_snapshot as _ensure_fresh_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text, format_player_snapshot_summary
+from ..utils.api.dakanu.assets import role_image_url, avatar_image_url
+from ..utils.api.dakanu.client import DakanuError
 from ..utils.helper.player_data import PlayerSnapshot
+from ..utils.api.dakanu.requests import fetch_player_season
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
 from ..utils.helper.recent_matches import MatchView, load_recent_match_views
+from ..utils.api.dakanu.models.player import DakanuProfile, DakanuPlayerSeason
 from ..utils.render.html.renderer.summary_card import (
     SummaryAssets,
     tier_index,
@@ -99,8 +95,8 @@ def format_snapshot_ai_summary(
 ) -> str:
     """从玩家快照提取供 AI 决策与复盘的结构化文本摘要。"""
     is_season_view = season_data is not None
-    effective_leisure = season_data["leisure"] if season_data is not None else snapshot.leisure
-    presence = None if is_season_view else snapshot.profile["presence"]
+    effective_leisure = season_data.leisure if season_data is not None else snapshot.leisure
+    presence = None if is_season_view else snapshot.profile.presence
     challenge_tier = resolve_challenge_tier(effective_leisure, presence)
     challenge_label, _, _ = challenge_tier_display(challenge_tier)
     return format_player_snapshot_summary(
@@ -119,7 +115,7 @@ async def render_snapshot_card(
 ) -> bytes:
     is_season_view = season_data is not None
     profile = build_season_profile(snapshot.profile, season_data) if season_data is not None else snapshot.profile
-    leisure = season_data["leisure"] if season_data is not None else snapshot.leisure
+    leisure = season_data.leisure if season_data is not None else snapshot.leisure
     emit_ai_text(
         format_snapshot_ai_summary(
             snapshot,
@@ -127,8 +123,8 @@ async def render_snapshot_card(
             season_data=season_data,
         )
     )
-    avatar_id = profile["player"]["avatarId"]
-    border_id = profile["player"]["borderId"]
+    avatar_id = profile.player.avatarId
+    border_id = profile.player.borderId
     avatar_url = f"https://www.dakanu.com/avatars/{avatar_id}.webp"
     baseplate_url = f"https://www.dakanu.com/baseplates-lg/{avatar_id}.webp"
     frame_url = f"https://www.dakanu.com/frames-pc/{border_id}.webp"
@@ -136,69 +132,76 @@ async def render_snapshot_card(
     baseplate_path = await resolve_image(baseplate_url, local_baseplate_image(avatar_id))
     frame_path = await resolve_image(frame_url, local_frame_image(border_id))
     avatar_frame_path = local_frame_index_image(border_id)
-    rank_tier = tier_index(profile["rank"]["segment"])
-    top_tier = tier_index(profile["rank"]["historicalSegment"])
+    rank_tier = tier_index(profile.rank.segment)
+    top_tier = tier_index(profile.rank.historicalSegment)
     tier_path = local_tier_image(rank_tier) if rank_tier else None
     top_tier_path = local_tier_image(top_tier) if top_tier else None
-    challenge_tier = resolve_challenge_tier(leisure, None if is_season_view else profile["presence"])
+    challenge_tier = resolve_challenge_tier(leisure, None if is_season_view else profile.presence)
     challenge_path = local_challenge_tier_image(challenge_tier) if challenge_tier else None
     if avatar_path is None or (rank_tier and tier_path is None) or (top_tier and top_tier_path is None):
         raise DakanuError("玩家图片读取失败，请稍后再试。")
 
     role_ids: list[int] = []
-    for role in profile["roles"][:5]:
-        if role["roleId"] not in role_ids:
-            role_ids.append(role["roleId"])
+    for role in profile.roles[:5]:
+        if role.roleId not in role_ids:
+            role_ids.append(role.roleId)
     recent_match_views: list[MatchView] = []
     map_slugs: list[str] = []
     if not is_season_view:
-        for match in profile["matches"][:20]:
-            role_id = match["roleId"]
+        for match in profile.matches[:20]:
+            role_id = match.roleId
             if role_id is not None and role_id > 0 and role_id not in role_ids:
                 role_ids.append(role_id)
         season_matches = select_current_season_matches(profile)
         if season_matches:
             recent_match_views = await load_recent_match_views(
-                profile["player"]["id"],
+                profile.player.id,
                 season_matches,
                 limit=len(season_matches),
             )
             for view in recent_match_views:
-                role_id = view.match["roleId"]
+                role_id = view.match.roleId
                 if role_id is not None and role_id > 0 and role_id not in role_ids:
                     role_ids.append(role_id)
-                map_info = resolve_map(view.match["mapId"])
+                map_info = resolve_map(view.match.mapId)
                 if map_info is not None and map_info.slug and map_info.slug not in map_slugs:
                     map_slugs.append(map_info.slug)
 
     async def _load_role(role_id: int) -> tuple[int, str]:
-        path = await resolve_image(role_image_url(role_id), local_role_image(role_id))
-        return role_id, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
+        uri = await read_image_data_uri(local_role_image(role_id))
+        if not uri:
+            path = await resolve_image(role_image_url(role_id), local_role_image(role_id))
+            uri = await read_image_data_uri(path)
+        return role_id, uri
 
     rel_avatar_ids: list[int] = []
     if not is_season_view:
-        if "teamUps" in profile:
-            for team_up in profile["teamUps"][:5]:
-                if team_up["avatarId"] > 0 and team_up["avatarId"] not in rel_avatar_ids:
-                    rel_avatar_ids.append(team_up["avatarId"])
-        if "rivals" in profile:
-            for rival in profile["rivals"][:5]:
-                if rival["avatarId"] > 0 and rival["avatarId"] not in rel_avatar_ids:
-                    rel_avatar_ids.append(rival["avatarId"])
+        for team_up in profile.teamUps[:5]:
+            if team_up.avatarId > 0 and team_up.avatarId not in rel_avatar_ids:
+                rel_avatar_ids.append(team_up.avatarId)
+        for rival in profile.rivals[:5]:
+            if rival.avatarId > 0 and rival.avatarId not in rel_avatar_ids:
+                rel_avatar_ids.append(rival.avatarId)
         for view in recent_match_views:
             for team in view.teams:
                 for roster_player in team.players:
-                    roster_avatar_id = roster_player["avatarId"]
+                    roster_avatar_id = roster_player.avatarId
                     if roster_avatar_id > 0 and roster_avatar_id not in rel_avatar_ids:
                         rel_avatar_ids.append(roster_avatar_id)
 
     async def _load_avatar(rel_avatar_id: int) -> tuple[int, str]:
-        path = await resolve_image(avatar_image_url(rel_avatar_id), local_avatar_image(rel_avatar_id))
-        return rel_avatar_id, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
+        uri = await read_image_data_uri(local_avatar_image(rel_avatar_id))
+        if not uri:
+            path = await resolve_image(avatar_image_url(rel_avatar_id), local_avatar_image(rel_avatar_id))
+            uri = await read_image_data_uri(path)
+        return rel_avatar_id, uri
 
     async def _load_map(slug: str) -> tuple[str, str]:
-        path = await resolve_image(f"https://www.dakanu.com/maps-wide/{slug}.webp", local_map_slug_image(slug))
-        return slug, _data_uri(path.read_bytes(), path.suffix) if path is not None else ""
+        uri = await read_image_data_uri(local_map_slug_image(slug))
+        if not uri:
+            path = await resolve_image(f"https://www.dakanu.com/maps-wide/{slug}.webp", local_map_slug_image(slug))
+            uri = await read_image_data_uri(path)
+        return slug, uri
 
     role_pairs, avatar_pairs, map_pairs = await asyncio.gather(
         asyncio.gather(*(_load_role(role_id) for role_id in role_ids)),
@@ -209,20 +212,34 @@ async def render_snapshot_card(
     avatar_images: dict[int, str] = {rel_avatar_id: uri for rel_avatar_id, uri in avatar_pairs if uri}
     map_images: dict[str, str] = {slug: uri for slug, uri in map_pairs if uri}
 
+    (
+        avatar_uri,
+        avatar_frame_uri,
+        tier_uri,
+        top_tier_uri,
+        challenge_uri,
+        baseplate_uri,
+        frame_uri,
+    ) = await asyncio.gather(
+        read_image_data_uri(avatar_path),
+        read_image_data_uri(avatar_frame_path),
+        read_image_data_uri(tier_path),
+        read_image_data_uri(top_tier_path),
+        read_image_data_uri(challenge_path),
+        read_image_data_uri(baseplate_path),
+        read_image_data_uri(frame_path),
+    )
+
     assets = SummaryAssets(
-        avatar=_data_uri(avatar_path.read_bytes(), avatar_path.suffix),
-        avatar_frame=_data_uri(avatar_frame_path.read_bytes(), avatar_frame_path.suffix)
-        if avatar_frame_path is not None
-        else "",
-        tier_icon=_data_uri(tier_path.read_bytes(), tier_path.suffix) if tier_path is not None else "",
-        top_tier_icon=_data_uri(top_tier_path.read_bytes(), top_tier_path.suffix) if top_tier_path is not None else "",
-        challenge_icon=_data_uri(challenge_path.read_bytes(), challenge_path.suffix)
-        if challenge_path is not None
-        else "",
-        baseplate=_data_uri(baseplate_path.read_bytes(), baseplate_path.suffix) if baseplate_path is not None else "",
-        frame=_data_uri(frame_path.read_bytes(), frame_path.suffix) if frame_path is not None else "",
+        avatar=avatar_uri,
+        avatar_frame=avatar_frame_uri,
+        tier_icon=tier_uri,
+        top_tier_icon=top_tier_uri,
+        challenge_icon=challenge_uri,
+        baseplate=baseplate_uri,
+        frame=frame_uri,
         role_images=role_images,
-        clan_name=snapshot.clan["name"] if snapshot.clan is not None else "",
+        clan_name=snapshot.clan.name if snapshot.clan is not None else "",
         leisure=leisure,
         avatar_images=avatar_images,
         map_images=map_images,
@@ -240,8 +257,8 @@ async def render_summary_card_from_snapshot(
     """基于给定快照渲染当前赛季或指定历史赛季战绩总览卡片。"""
     if season is None or season.current or season.season_id <= 0:
         return await render_snapshot_card(snapshot)
-    season_data = await fetch_player_season(snapshot.profile["player"]["id"], season.season_id)
-    if season_data is None or season_data["summary"]["rounds"] <= 0:
+    season_data = await fetch_player_season(snapshot.profile.player.id, season.season_id)
+    if season_data is None or season_data.summary.rounds <= 0:
         raise DakanuError(f"该玩家在 {season.label} 暂无战绩记录。")
     return await render_snapshot_card(snapshot, season_data=season_data)
 
@@ -250,14 +267,3 @@ async def build_summary_card(player_id: str, *, season: ResolvedSeason | None = 
     """读取本地快照渲染；无快照或超过 1 天时静默拉取最新快照。"""
     snapshot = await ensure_player_snapshot(player_id)
     return await render_summary_card_from_snapshot(snapshot, season=season)
-
-
-def _data_uri(content: bytes, suffix: str) -> str:
-    mime = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }.get(suffix.lower(), "image/webp")
-    return f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"

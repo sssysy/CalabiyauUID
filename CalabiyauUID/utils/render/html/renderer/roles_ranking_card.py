@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
-from ....api.dakanu import DakanuRolesRankingBoard, DakanuRolesRankingEntry
 from ....helper.maps import resolve_role_meta
+from ....api.dakanu.models.ranking import DakanuRolesRankingBoard, DakanuRolesRankingEntry
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,8 @@ def _sort_entries(
     sort_by: str,
 ) -> list[DakanuRolesRankingEntry]:
     if sort_by == "winRate":
-        return sorted(entries, key=lambda item: (item["winRate"], item["games"]), reverse=True)
-    return sorted(entries, key=lambda item: (item["appearanceRate"], item["games"]), reverse=True)
+        return sorted(entries, key=lambda item: (item.winRate, item.games), reverse=True)
+    return sorted(entries, key=lambda item: (item.appearanceRate, item.games), reverse=True)
 
 
 def _resolve_role_meta(role_id: int) -> tuple[str, str, str, str, bool]:
@@ -91,12 +91,12 @@ def _build_row_item(
     role_names: Mapping[int, str],
     role_images: Mapping[int, str],
 ) -> RolesRankingRowItem:
-    role_id = entry["roleId"]
+    role_id = entry.roleId
     name = role_names[role_id] if role_id in role_names else f"角色 {role_id}"
     portrait = role_images[role_id] if role_id in role_images else ""
     faction_name, faction_dot_color, faction_text_color, position_name, has_meta_tag = _resolve_role_meta(role_id)
-    app_delta_text, app_delta_class = _format_rate_delta(entry["appearanceRateDelta"])
-    win_delta_text, win_delta_class = _format_rate_delta(entry["winRateDelta"])
+    app_delta_text, app_delta_class = _format_rate_delta(entry.appearanceRateDelta)
+    win_delta_text, win_delta_class = _format_rate_delta(entry.winRateDelta)
     return RolesRankingRowItem(
         position=position,
         rank_class=_rank_class(position),
@@ -108,15 +108,15 @@ def _build_row_item(
         faction_text_color=faction_text_color,
         position_name=position_name,
         has_meta_tag=has_meta_tag,
-        appearance_rate_text=f"{entry['appearanceRate'] * 100:.1f}%",
+        appearance_rate_text=f"{entry.appearanceRate * 100:.1f}%",
         appearance_delta_text=app_delta_text,
         appearance_delta_class=app_delta_class,
-        win_rate_text=f"{entry['winRate'] * 100:.1f}%",
+        win_rate_text=f"{entry.winRate * 100:.1f}%",
         win_delta_text=win_delta_text,
         win_delta_class=win_delta_class,
-        games_text=f"{entry['games']:,}",
-        wins_text=f"{entry['wins']:,}",
-        players_text=f"{entry['players']:,}",
+        games_text=f"{entry.games:,}",
+        wins_text=f"{entry.wins:,}",
+        players_text=f"{entry.players:,}",
     )
 
 
@@ -129,19 +129,19 @@ def _build_roles_ranking_context(
 ) -> RolesRankingTemplateContext:
     if sort_by not in {"appearanceRate", "winRate"}:
         raise ValueError(f"不支持的排序字段：{sort_by}")
-    sorted_entries = _sort_entries(board["entries"], sort_by)
+    sorted_entries = _sort_entries(board.entries, sort_by)
     rows = tuple(
         _build_row_item(idx, entry, role_names, role_images) for idx, entry in enumerate(sorted_entries, start=1)
     )
     title = "超弦体胜率排行" if sort_by == "winRate" else "超弦体登场率排行"
-    scope_label = "仅排位" if board["rankedOnly"] else "全部模式"
-    scope_class = "scope-ranked" if board["rankedOnly"] else "scope-all"
+    scope_label = "仅排位" if board.rankedOnly else "全部模式"
+    scope_class = "scope-ranked" if board.rankedOnly else "scope-all"
     return RolesRankingTemplateContext(
         title=title,
         scope_label=scope_label,
         scope_class=scope_class,
-        covered_matches_text=f"{board['coveredMatches']:,} 场",
-        day_text=board["day"],
+        covered_matches_text=f"{board.coveredMatches:,} 场",
+        day_text=board.day,
         sort_by=sort_by,
         has_entries=bool(rows),
         rows=rows,

@@ -6,7 +6,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from .banned_services import build_banned_card
-from ..utils.api.dakanu import DakanuError
+from ..utils.api.dakanu.client import DakanuError
 
 sv_banned = SV("卡拉彼丘封神榜")
 

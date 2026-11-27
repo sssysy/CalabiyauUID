@@ -1,6 +1,8 @@
 """按 UID 或游戏昵称解析玩家 playerId（仅接受唯一精确匹配）。"""
 
-from ..api.dakanu import DakanuError, DakanuPlayerSuggestion, search_players
+from ..api.dakanu.client import DakanuError
+from ..api.dakanu.requests import search_players
+from ..api.dakanu.models.player import DakanuPlayerSuggestion
 
 
 def is_numeric_uid(value: str) -> bool:
@@ -9,9 +11,9 @@ def is_numeric_uid(value: str) -> bool:
 
 
 def _format_candidate(item: DakanuPlayerSuggestion) -> str:
-    if item["matchedBy"] == "previous-nickname" and item["matchedName"] != item["nickname"]:
-        return f"- {item['nickname']}（曾用名：{item['matchedName']}，UID：{item['playerId']}）"
-    return f"- {item['nickname']}（UID：{item['playerId']}）"
+    if item.matchedBy == "previous-nickname" and item.matchedName != item.nickname:
+        return f"- {item.nickname}（曾用名：{item.matchedName}，UID：{item.playerId}）"
+    return f"- {item.nickname}（UID：{item.playerId}）"
 
 
 def _format_candidates(suggestions: list[DakanuPlayerSuggestion], limit: int = 5) -> str:
@@ -21,7 +23,7 @@ def _format_candidates(suggestions: list[DakanuPlayerSuggestion], limit: int = 5
 def _dedupe_by_player_id(items: list[DakanuPlayerSuggestion]) -> list[DakanuPlayerSuggestion]:
     unique: dict[str, DakanuPlayerSuggestion] = {}
     for item in items:
-        player_id = item["playerId"]
+        player_id = item.playerId
         if player_id not in unique:
             unique[player_id] = item
     return list(unique.values())
@@ -39,9 +41,9 @@ async def resolve_player_input(raw_query: str) -> str:
     if not suggestions:
         raise DakanuError(f"没有找到昵称为「{cleaned}」的玩家，请确认完整昵称或改用 UID。")
 
-    exact_matches = [item for item in suggestions if item["exact"]]
+    exact_matches = [item for item in suggestions if item.exact]
     if len(exact_matches) == 1:
-        return exact_matches[0]["playerId"]
+        return exact_matches[0].playerId
     if len(exact_matches) > 1:
         candidates = _format_candidates(exact_matches)
         raise DakanuError(f"找到多个与「{cleaned}」精确匹配的玩家，请改用 UID：\n{candidates}")

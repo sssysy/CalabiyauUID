@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 
 from ..render import CardTemplateContext, render_card, render_template
 from .summary_card import tier_display
-from ....api.dakanu import DakanuChatMessage, DakanuChatAggregate
+from ....api.dakanu.models.community import DakanuChatMessage, DakanuChatAggregate
 
 DEFAULT_WORLD_CHAT_LIMIT = 25
 
@@ -149,10 +149,10 @@ def select_recent_messages(
     """按玩家、时间与正文去重后升序截取最新 N 条消息。"""
     seen: dict[tuple[str, int, str], DakanuChatMessage] = {}
     for msg in messages:
-        key = (msg["player_id"], msg["sent_at"], msg["message"])
+        key = (msg.player_id, msg.sent_at, msg.message)
         if key not in seen:
             seen[key] = msg
-    ordered = sorted(seen.values(), key=lambda item: (item["sent_at"], item["player_id"]))
+    ordered = sorted(seen.values(), key=lambda item: (item.sent_at, item.player_id))
     if limit <= 0:
         return []
     return ordered[-limit:]
@@ -167,10 +167,10 @@ def collect_chat_asset_ids(
     emote_ids: set[str] = set()
 
     for msg in messages:
-        icon_id = msg["icon"]
+        icon_id = msg.icon
         if icon_id is not None and icon_id > 0:
             avatar_ids.add(icon_id)
-        raw_msg = msg["message"]
+        raw_msg = msg.message
         kv = _parse_kv_message(raw_msg)
         if kv is not None and _to_int(_kv_value(kv, "type")) == 1:
             role_ids.update(_extract_player_card_role_ids(kv))
@@ -309,23 +309,23 @@ def build_world_chat_context(
     limit: int = DEFAULT_WORLD_CHAT_LIMIT,
 ) -> WorldChatTemplateContext:
     """把 Dakanu 世界频道聚合响应整理为模板上下文。"""
-    population = aggregate["selection"]["population"]
+    population = aggregate.selection.population
     population_text = str(population) if population is not None else "—"
-    recent_msgs = select_recent_messages(aggregate["messages"], limit=limit)
+    recent_msgs = select_recent_messages(aggregate.messages, limit=limit)
 
     rows: list[WorldChatRowItem] = []
     for msg in recent_msgs:
-        player_id = msg["player_id"]
-        nickname = msg["nick"] or player_id or "未知玩家"
-        icon_id = msg["icon"]
+        player_id = msg.player_id
+        nickname = msg.nick or player_id or "未知玩家"
+        icon_id = msg.icon
         avatar_uri = assets.avatar_images[icon_id] if icon_id is not None and icon_id in assets.avatar_images else ""
         initial = nickname[:1].upper() if nickname else "?"
-        sent_time = datetime.fromtimestamp(msg["sent_at"]).strftime("%H:%M")
+        sent_time = datetime.fromtimestamp(msg.sent_at).strftime("%H:%M")
 
-        raw_msg = msg["message"]
+        raw_msg = msg.message
         kv = _parse_kv_message(raw_msg)
         card_type = _to_int(_kv_value(kv, "type")) if kv is not None else None
-        level_val = msg["level"]
+        level_val = msg.level
 
         if kv is not None and card_type == 1:
             player_card = _build_player_card(kv, assets)

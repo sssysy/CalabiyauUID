@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 import base64
 import hashlib
+from typing import Any, Annotated
 from dataclasses import dataclass
 from urllib.parse import quote
 
 import httpx
+from pydantic import Field, AliasPath, BaseModel, ConfigDict, BeforeValidator, ValidationError
 
 from gsuid_core.logger import logger
 
@@ -90,9 +93,6 @@ _FBE_TABLE: dict[str, str] = {
     "/": "v",
 }
 
-JsonPrimitive = str | int | float | bool | None
-JsonValue = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
-
 
 class FanbookError(RuntimeError):
     """Fanbook Web 接口请求或业务校验失败。"""
@@ -123,10 +123,61 @@ class FanbookRefreshResult:
     expire_at_ts: int
 
 
+def _coerce_str(value: Any) -> str:
+    return (
+        value
+        if isinstance(value, str)
+        else (str(value) if isinstance(value, int) and not isinstance(value, bool) else "")
+    )
+
+
+def _coerce_int(value: Any) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return int(value) if isinstance(value, str) and value.isdigit() else 0
+
+
+_CoercedStr = Annotated[str, BeforeValidator(_coerce_str)]
+_OnlyStr = Annotated[str, BeforeValidator(lambda val: val if isinstance(val, str) else "")]
+_CoercedInt = Annotated[int, BeforeValidator(_coerce_int)]
+_OptInt = Annotated[
+    int | None, BeforeValidator(lambda val: val if isinstance(val, int) and not isinstance(val, bool) else None)
+]
+
+
+class _FanbookModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class _FanbookEnvelope(_FanbookModel):
+    code: _OptInt = None
+    status: Any = None
+    desc: _OnlyStr = ""
+    message: _OnlyStr = ""
+    data: Any = None
+
+    @property
+    def error_message(self) -> str:
+        return self.desc or self.message or "请求失败"
+
+
+class _AlipayData(_FanbookModel):
+    app_id: _CoercedStr = Field(default="", validation_alias=AliasPath("t_captcha", "app_id"))
+
+
+class _LoginData(_FanbookModel):
+    user_id: _CoercedStr = ""
+    username: _CoercedStr = ""
+    nickname: _CoercedStr = ""
+    avatar: _CoercedStr = ""
+    sign: _CoercedStr = ""
+    expire_time: _CoercedInt = 0
+
+
 def fbe_encode(raw_text: str) -> str:
     """按 Fanbook Web 的 FBE 字母表对字符串做 Base64 字符替换编码。"""
     encoded_bytes = base64.b64encode(raw_text.encode("utf-8")).decode("ascii")
-    return "".join(_FBE_TABLE[char] if char in _FBE_TABLE else char for char in encoded_bytes)
+    return "".join(_FBE_TABLE.get(char, char) for char in encoded_bytes)
 
 
 def _encode_signature_component(raw_text: str) -> str:
@@ -142,42 +193,8 @@ def _build_super_properties(device_id: str) -> str:
     return base64.b64encode(payload.encode("utf-8")).decode("ascii")
 
 
-def _serialize_json_compact(payload: dict[str, JsonValue]) -> str:
-    parts: list[str] = []
-    for key, value in payload.items():
-        parts.append(f'"{_escape_json_str(key)}":{_serialize_json_value(value)}')
-    return "{" + ",".join(parts) + "}"
-
-
-def _escape_json_str(text: str) -> str:
-    escaped = (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\b", "\\b")
-        .replace("\f", "\\f")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("\t", "\\t")
-    )
-    return escaped
-
-
-def _serialize_json_value(value: JsonValue) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, str):
-        return f'"{_escape_json_str(value)}"'
-    if isinstance(value, list):
-        return "[" + ",".join(_serialize_json_value(item) for item in value) + "]"
-    return _serialize_json_compact(value)
-
-
 def _build_signed_request(
-    body: dict[str, JsonValue],
+    body: dict[str, Any],
     *,
     device_id: str,
     authorization: str = "",
@@ -186,7 +203,7 @@ def _build_signed_request(
     timestamp_ms = int(time.time() * 1000)
     signed_body = dict(body)
     signed_body["transaction"] = str(uuid.uuid4())
-    request_body = _serialize_json_compact(signed_body)
+    request_body = json.dumps(signed_body, separators=(",", ":"), ensure_ascii=False)
 
     sign_fields: list[tuple[str, str]] = [
         ("AppKey", _APP_KEY),
@@ -222,11 +239,11 @@ def _build_signed_request(
 
 async def _post_fanbook_api(
     path: str,
-    body: dict[str, JsonValue],
+    body: dict[str, Any],
     *,
     device_id: str,
     authorization: str = "",
-) -> tuple[dict[str, object], httpx.Headers]:
+) -> tuple[_FanbookEnvelope, httpx.Headers]:
     headers, request_body = _build_signed_request(
         body,
         device_id=device_id,
@@ -248,77 +265,36 @@ async def _post_fanbook_api(
         raise FanbookError(f"Fanbook 请求被拒绝（HTTP {response.status_code}）。")
 
     try:
-        parsed: object = response.json()
+        raw_payload: Any = response.json()
     except ValueError as exc:
         logger.warning(f"{_LOG_TAG} 解析 {path} 响应 JSON 失败：{exc}")
         raise FanbookError("Fanbook 返回了无效响应，请稍后重试。") from exc
 
-    if not isinstance(parsed, dict):
-        raise FanbookError("Fanbook 响应格式异常。")
+    try:
+        envelope = _FanbookEnvelope.model_validate(raw_payload)
+    except ValidationError as exc:
+        raise FanbookError("Fanbook 响应格式异常。") from exc
 
-    code_obj = parsed["code"] if "code" in parsed else None
-    code = code_obj if isinstance(code_obj, int) else None
-    status_obj = parsed["status"] if "status" in parsed else None
-    desc_obj = parsed["desc"] if "desc" in parsed else None
-    message_obj = parsed["message"] if "message" in parsed else None
-    desc = (
-        desc_obj
-        if isinstance(desc_obj, str) and desc_obj
-        else (message_obj if isinstance(message_obj, str) and message_obj else "请求失败")
-    )
+    if envelope.code not in (1000, 200) and envelope.status is not True:
+        logger.warning(f"{_LOG_TAG} 接口 {path} 业务失败 code={envelope.code} desc={envelope.error_message}")
+        raise FanbookError(envelope.error_message, code=envelope.code)
 
-    if code not in (1000, 200) and status_obj is not True:
-        logger.warning(f"{_LOG_TAG} 接口 {path} 业务失败 code={code} desc={desc}")
-        raise FanbookError(desc, code=code)
-
-    return parsed, response.headers
-
-
-def _extract_data_dict(parsed: dict[str, object]) -> dict[str, object]:
-    data_obj = parsed["data"] if "data" in parsed else None
-    if not isinstance(data_obj, dict):
-        raise FanbookError("Fanbook 响应缺少有效 data 字段。")
-    return data_obj
-
-
-def _read_str_field(payload: dict[str, object], key: str, *, default: str = "") -> str:
-    if key not in payload:
-        return default
-    value = payload[key]
-    if isinstance(value, str):
-        return value
-    if isinstance(value, int):
-        return str(value)
-    return default
-
-
-def _read_int_field(payload: dict[str, object], key: str, *, default: int = 0) -> int:
-    if key not in payload:
-        return default
-    value = payload[key]
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return default
+    return envelope, response.headers
 
 
 async def fetch_captcha_app_id(device_id: str) -> str:
     """获取 Fanbook Web 当前使用的腾讯防水墙 CaptchaAppId。"""
     try:
-        parsed, _ = await _post_fanbook_api("/api/common/alipay", {}, device_id=device_id)
+        envelope, _ = await _post_fanbook_api("/api/common/alipay", {}, device_id=device_id)
     except FanbookError as exc:
         logger.warning(f"{_LOG_TAG} 获取 CaptchaAppId 失败，回退默认配置：{exc}")
         return _DEFAULT_CAPTCHA_APP_ID
 
-    data_obj = parsed["data"] if "data" in parsed else None
-    if not isinstance(data_obj, dict):
+    try:
+        data = _AlipayData.model_validate(envelope.data)
+    except ValidationError:
         return _DEFAULT_CAPTCHA_APP_ID
-    captcha_obj = data_obj["t_captcha"] if "t_captcha" in data_obj else None
-    if not isinstance(captcha_obj, dict):
-        return _DEFAULT_CAPTCHA_APP_ID
-    app_id = _read_str_field(captcha_obj, "app_id")
-    return app_id if app_id else _DEFAULT_CAPTCHA_APP_ID
+    return data.app_id or _DEFAULT_CAPTCHA_APP_ID
 
 
 async def send_sms_code(
@@ -330,7 +306,7 @@ async def send_sms_code(
     device_id: str,
 ) -> None:
     """提交腾讯验证码票据，向目标手机号发送 Fanbook 登录短信验证码。"""
-    body: dict[str, JsonValue] = {
+    body: dict[str, Any] = {
         "mobile": fbe_encode(mobile),
         "area_code": area_code,
         "encrypt_type": "FBE",
@@ -350,7 +326,7 @@ async def login_by_mobile(
     device_id: str,
 ) -> FanbookUserSession:
     """使用手机号与短信验证码完成 Fanbook Web 登录。"""
-    body: dict[str, JsonValue] = {
+    body: dict[str, Any] = {
         "device": _PLATFORM,
         "type": "mobile",
         "code": fbe_encode(sms_code),
@@ -358,29 +334,22 @@ async def login_by_mobile(
         "encrypt_type": "FBE",
         "mobile": fbe_encode(mobile),
     }
-    parsed, headers = await _post_fanbook_api("/api/user/login", body, device_id=device_id)
-    data = _extract_data_dict(parsed)
+    envelope, headers = await _post_fanbook_api("/api/user/login", body, device_id=device_id)
+    try:
+        data = _LoginData.model_validate(envelope.data)
+    except ValidationError as exc:
+        raise FanbookError("Fanbook 响应缺少有效 data 字段。") from exc
 
-    fb_user_id = _read_str_field(data, "user_id")
-    fb_short_id = _read_str_field(data, "username")
-    nickname = _read_str_field(data, "nickname")
-    avatar = _read_str_field(data, "avatar")
-    sign = _read_str_field(data, "sign")
-    if not sign and "authorization" in headers:
-        sign = headers["authorization"]
-
-    if not fb_user_id or not sign:
+    sign = data.sign or headers.get("authorization", "")
+    if not data.user_id or not sign:
         raise FanbookError("登录成功但未返回完整的 Fanbook 用户凭据。")
 
-    expire_at_ts = _read_int_field(data, "expire_time")
-    if expire_at_ts <= 0:
-        expire_at_ts = int(time.time()) + _DEFAULT_EXPIRE_SECONDS
-
+    expire_at_ts = data.expire_time if data.expire_time > 0 else int(time.time()) + _DEFAULT_EXPIRE_SECONDS
     return FanbookUserSession(
-        fb_user_id=fb_user_id,
-        fb_short_id=fb_short_id,
-        nickname=nickname,
-        avatar=avatar,
+        fb_user_id=data.user_id,
+        fb_short_id=data.username,
+        nickname=data.nickname,
+        avatar=data.avatar,
         sign=sign,
         expire_at_ts=expire_at_ts,
         device_id=device_id,
@@ -393,20 +362,17 @@ async def refresh_token(
     device_id: str,
 ) -> FanbookRefreshResult:
     """调用 /api/common/ctk 刷新 Fanbook 登录令牌。"""
-    parsed, headers = await _post_fanbook_api(
+    envelope, headers = await _post_fanbook_api(
         "/api/common/ctk",
         {},
         device_id=device_id,
         authorization=sign,
     )
-    new_sign = headers["authorization"] if "authorization" in headers else ""
+    new_sign = headers.get("authorization", "")
     if not new_sign:
         raise FanbookError("Fanbook 未返回新的续期令牌。")
 
-    data_obj = parsed["data"] if "data" in parsed else None
-    expire_at_ts = 0
-    if isinstance(data_obj, dict):
-        expire_at_ts = _read_int_field(data_obj, "expire_time")
+    expire_at_ts = _LoginData.model_validate(envelope.data).expire_time if isinstance(envelope.data, dict) else 0
     if expire_at_ts <= 0:
         expire_at_ts = int(time.time()) + _DEFAULT_EXPIRE_SECONDS
     return FanbookRefreshResult(sign=new_sign, expire_at_ts=expire_at_ts)

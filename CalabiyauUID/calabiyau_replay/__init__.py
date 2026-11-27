@@ -11,8 +11,8 @@ from .replay_services import (
     ensure_replay_file,
     build_replay_file_message,
 )
-from ..utils.api.dakanu import DakanuError
 from ..utils.helper.ai_bridge import emit_ai_text
+from ..utils.api.dakanu.client import DakanuError
 
 sv_replay = SV("卡拉彼丘回放下载")
 

@@ -10,11 +10,11 @@ from .clan_services import (
     build_clan_card_from_snapshot,
     resolve_clan_target_with_refresh,
 )
-from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import (
     BUSY_FALLBACK_NOTICE,
     schedule_refreshed_card_push,
 )
+from ..utils.api.dakanu.client import DakanuError
 
 sv_clan = SV("卡拉彼丘战队")
 
@@ -48,11 +48,11 @@ async def calabiyau_clan_info(bot: Bot, ev: Event) -> None:
     try:
         image = await build_clan_card(clan)
     except DakanuError as exc:
-        logger.warning(f"[卡拉彼丘·战队查询] 读取战队 {clan['clanId']} 成员失败：{exc}")
+        logger.warning(f"[卡拉彼丘·战队查询] 读取战队 {clan.clanId} 成员失败：{exc}")
         await bot.send(str(exc))
         return
     except RuntimeError:
-        logger.exception(f"[卡拉彼丘·战队查询] 渲染战队 {clan['clanId']} 卡片失败")
+        logger.exception(f"[卡拉彼丘·战队查询] 渲染战队 {clan.clanId} 卡片失败")
         await bot.send("战队信息卡片生成失败，请稍后再试。")
         return
 

@@ -10,10 +10,12 @@ import httpx
 from gsuid_core.bot import Bot
 from gsuid_core.logger import logger
 
-from ..api.dakanu import DakanuError, DakanuProfile, fetch_clan, fetch_leisure, refresh_profile
 from .player_data import PlayerSnapshot, has_player_data, load_player_snapshot, save_player_snapshot
 from ..utils.cache import KeyedLockPool
 from ..utils.background import track_background_task
+from ..api.dakanu.client import DakanuError
+from ..api.dakanu.requests import fetch_clan, fetch_leisure, refresh_profile
+from ..api.dakanu.models.player import DakanuProfile
 
 _SNAPSHOT_TTL_SECONDS = 86400
 _AUTO_REFRESH_WAIT_SECONDS = 10.0
@@ -45,7 +47,7 @@ _inflight: dict[str, asyncio.Task[RefreshResult]] = {}
 async def _snapshot_from_profile(player_id: str, profile: DakanuProfile) -> PlayerSnapshot:
     leisure, clan = await asyncio.gather(
         fetch_leisure(player_id),
-        fetch_clan(profile["player"]["clanId"]),
+        fetch_clan(profile.player.clanId),
     )
     snapshot = PlayerSnapshot(
         profile=profile,

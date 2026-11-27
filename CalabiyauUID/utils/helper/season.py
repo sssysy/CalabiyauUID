@@ -3,15 +3,10 @@
 import re
 from dataclasses import dataclass
 
-from ..api.dakanu import (
-    DakanuMeta,
-    DakanuRank,
-    DakanuError,
-    DakanuProfile,
-    DakanuPlayerSeason,
-    DakanuRankingSeasons,
-    fetch_ranking_seasons,
-)
+from ..api.dakanu.client import DakanuError
+from ..api.dakanu.requests import fetch_ranking_seasons
+from ..api.dakanu.models.player import DakanuMeta, DakanuRank, DakanuProfile, DakanuPlayerSeason
+from ..api.dakanu.models.ranking import DakanuRankingSeasons
 
 _S_EP_RE = re.compile(r"^s(\d+)ep(\d+)$", re.IGNORECASE)
 _SP_RE = re.compile(r"^(\d+)sp(\d+)$", re.IGNORECASE)
@@ -55,18 +50,18 @@ def split_season_and_target(raw_text: str) -> tuple[str | None, str]:
 def _catalog_entries(catalog: DakanuRankingSeasons) -> list[ResolvedSeason]:
     entries: list[ResolvedSeason] = [
         ResolvedSeason(
-            season_id=catalog["current"]["season_id"],
-            label=catalog["current"]["label"],
-            current=catalog["current"]["current"],
+            season_id=catalog.current.season_id,
+            label=catalog.current.label,
+            current=catalog.current.current,
         )
     ]
-    for item in catalog["seasons"]:
+    for item in catalog.seasons:
         entries.append(
             ResolvedSeason(
-                season_id=item["season_id"],
-                label=item["label"],
-                current=item["current"],
-                rank_types=tuple(item["rank_types"]),
+                season_id=item.season_id,
+                label=item.label,
+                current=item.current,
+                rank_types=tuple(item.rank_types),
             )
         )
     return entries
@@ -151,49 +146,49 @@ def _first_positive_opt(*values: int | None) -> int | None:
 
 def build_season_profile(profile: DakanuProfile, season: DakanuPlayerSeason) -> DakanuProfile:
     """将历史赛季数据覆盖到玩家基础档案上，保留玩家资料并清空无历史数据的区块。"""
-    base_rank = profile["rank"]
-    final_point = season["final"]
-    top_point = season["top"]
-    season_rank: DakanuRank = {
-        "segment": _first_positive(final_point["segment"], top_point["segment"]),
-        "topSegment": _first_positive(top_point["segment"], final_point["segment"]),
-        "historicalSegment": _first_positive(season["historicalTopSegment"], base_rank["historicalSegment"]),
-        "historicalSegmentSeason": base_rank["historicalSegmentSeason"],
-        "historicalSegmentPos": _first_positive_opt(
-            season["historicalTopPosition"],
-            base_rank["historicalSegmentPos"],
+    base_rank = profile.rank
+    final_point = season.final
+    top_point = season.top
+    season_rank = DakanuRank(
+        segment=_first_positive(final_point.segment, top_point.segment),
+        topSegment=_first_positive(top_point.segment, final_point.segment),
+        historicalSegment=_first_positive(season.historicalTopSegment, base_rank.historicalSegment),
+        historicalSegmentSeason=base_rank.historicalSegmentSeason,
+        historicalSegmentPos=_first_positive_opt(
+            season.historicalTopPosition,
+            base_rank.historicalSegmentPos,
         ),
-        "divisionScore": _first_positive(final_point["divisionScore"], top_point["divisionScore"]),
-        "topDivisionScore": base_rank["topDivisionScore"],
-        "gradeScore": _first_positive(final_point["gradeScore"], top_point["gradeScore"]),
-        "topGradeScore": base_rank["topGradeScore"],
-        "rankPos": _first_positive_opt(final_point["rankPosition"], top_point["rankPosition"]),
-        "topRankPos": _first_positive_opt(top_point["rankPosition"], final_point["rankPosition"]),
-        "likeCount": base_rank["likeCount"],
-    }
-    base_meta = profile["meta"]
-    season_meta: DakanuMeta = {
-        "cached": base_meta["cached"],
-        "source": "season",
-        "currentSeason": season["seasonLabel"],
-        "matchesTotal": 0,
-        "detailsAvailable": 0,
-        "warnings": [],
-        "fetchedAt": base_meta["fetchedAt"],
-        "stale": None,
-        "observedMatches": 0,
-        "lastCheckedAt": base_meta["lastCheckedAt"],
-    }
-    return {
-        "player": profile["player"],
-        "presence": profile["presence"],
-        "rank": season_rank,
-        "summary": season["summary"],
-        "modes": season["modes"],
-        "roles": season["roles"],
-        "matches": [],
-        "historyMatches": [],
-        "teamUps": [],
-        "rivals": [],
-        "meta": season_meta,
-    }
+        divisionScore=_first_positive(final_point.divisionScore, top_point.divisionScore),
+        topDivisionScore=base_rank.topDivisionScore,
+        gradeScore=_first_positive(final_point.gradeScore, top_point.gradeScore),
+        topGradeScore=base_rank.topGradeScore,
+        rankPos=_first_positive_opt(final_point.rankPosition, top_point.rankPosition),
+        topRankPos=_first_positive_opt(top_point.rankPosition, final_point.rankPosition),
+        likeCount=base_rank.likeCount,
+    )
+    base_meta = profile.meta
+    season_meta = DakanuMeta(
+        cached=base_meta.cached,
+        source="season",
+        currentSeason=season.seasonLabel,
+        matchesTotal=0,
+        detailsAvailable=0,
+        warnings=[],
+        fetchedAt=base_meta.fetchedAt,
+        stale=None,
+        observedMatches=0,
+        lastCheckedAt=base_meta.lastCheckedAt,
+    )
+    return profile.model_copy(
+        update={
+            "rank": season_rank,
+            "summary": season.summary,
+            "modes": season.modes,
+            "roles": season.roles,
+            "matches": [],
+            "historyMatches": [],
+            "teamUps": [],
+            "rivals": [],
+            "meta": season_meta,
+        }
+    )

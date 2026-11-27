@@ -10,12 +10,12 @@ from .stats_services import (
     resolve_stats_query,
     render_summary_card_from_snapshot,
 )
-from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import (
     BUSY_FALLBACK_NOTICE,
     schedule_refreshed_card_push,
     ensure_player_snapshot_with_fallback,
 )
+from ..utils.api.dakanu.client import DakanuError
 
 sv_stats = SV("卡拉彼丘战绩查询")
 

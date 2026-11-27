@@ -5,7 +5,6 @@ from datetime import datetime
 from gsuid_core.models import Event
 from gsuid_core.ai_core.register import ai_tools
 
-from ...utils.api.dakanu import DakanuError, fetch_player_season
 from ...utils.helper.maps import resolve_map, resolve_role_name
 from ...utils.helper.season import (
     ResolvedSeason,
@@ -15,6 +14,8 @@ from ...utils.helper.season import (
 )
 from ...utils.helper.refresh import ensure_player_snapshot
 from ...utils.helper.ai_bridge import format_player_snapshot_summary
+from ...utils.api.dakanu.client import DakanuError
+from ...utils.api.dakanu.requests import fetch_player_season
 from ...utils.database.model_bind import get_main_uid
 from ...utils.helper.player_resolve import resolve_player_input
 from ...utils.render.html.renderer.summary_card import (
@@ -86,10 +87,10 @@ async def calabiyau_query_player_text(ev: Event, query: str = "", season: str = 
             season_data = await fetch_player_season(player_id, resolved_season.season_id)
         except DakanuError as exc:
             return f"获取 UID {player_id} 的 {resolved_season.label} 赛季战绩失败：{exc}"
-        if season_data is None or season_data["summary"]["rounds"] <= 0:
+        if season_data is None or season_data.summary.rounds <= 0:
             return f"该玩家（UID：{player_id}）在 {resolved_season.label} 暂无战绩记录。"
         season_profile = build_season_profile(snapshot.profile, season_data)
-        challenge_tier = resolve_challenge_tier(season_data["leisure"], None)
+        challenge_tier = resolve_challenge_tier(season_data.leisure, None)
         challenge_label, _, _ = challenge_tier_display(challenge_tier)
         return format_player_snapshot_summary(
             snapshot,
@@ -99,7 +100,7 @@ async def calabiyau_query_player_text(ev: Event, query: str = "", season: str = 
             is_season_view=True,
         )
 
-    challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile["presence"])
+    challenge_tier = resolve_challenge_tier(snapshot.leisure, snapshot.profile.presence)
     challenge_label, _, _ = challenge_tier_display(challenge_tier)
     summary_text = format_player_snapshot_summary(
         snapshot,
@@ -107,24 +108,26 @@ async def calabiyau_query_player_text(ev: Event, query: str = "", season: str = 
         challenge_label=challenge_label,
     )
 
-    matches = snapshot.profile["matches"][:_RECENT_TEXT_LIMIT]
+    matches = snapshot.profile.matches[:_RECENT_TEXT_LIMIT]
     if not matches:
         return f"{summary_text}\n近期对局列表为空。"
 
     match_lines: list[str] = [f"\n最近 {len(matches)} 场对局索引（可用于查询单局详情或下载回放）："]
     for idx, match in enumerate(matches, start=1):
-        map_info = resolve_map(match["mapId"])
-        map_name = map_info.name if map_info is not None else f"地图#{match['mapId']}"
-        role_name = resolve_role_name(match["roleId"]) or f"角色#{match['roleId']}"
+        map_info = resolve_map(match.mapId)
+        map_name = map_info.name if map_info is not None else f"地图#{match.mapId}"
+        role_name = resolve_role_name(match.roleId) or f"角色#{match.roleId}"
         score_text = (
-            f"{match['myScore']}:{match['opponentScore']}"
-            if match["myScore"] is not None and match["opponentScore"] is not None
+            f"{match.myScore}:{match.opponentScore}"
+            if match.myScore is not None and match.opponentScore is not None
             else "-"
         )
-        played_str = datetime.fromtimestamp(match["playedAt"] / 1000).strftime("%m-%d %H:%M")
+        played_str = (
+            datetime.fromtimestamp(match.playedAt / 1000).strftime("%m-%d %H:%M") if match.playedAt is not None else "-"
+        )
         match_lines.append(
-            f"{idx}. [{match['result']}] {match['modeLabel']} · {map_name} · {role_name} | "
-            f"{score_text} | KDA {match['kills']}/{match['deaths']}/{match['assists']} | "
-            f"{played_str} | roomId={match['roomId']}"
+            f"{idx}. [{match.result}] {match.modeLabel} · {map_name} · {role_name} | "
+            f"{score_text} | KDA {match.kills}/{match.deaths}/{match.assists} | "
+            f"{played_str} | roomId={match.roomId}"
         )
     return summary_text + "\n".join(match_lines)

@@ -4,13 +4,11 @@ import asyncio
 from pathlib import Path
 from dataclasses import dataclass
 
-from gsuid_core.pool import to_thread
-
 from ..utils.downloader import resolve_image
 from ..utils.utils.cache import AsyncTtlCache
 from ..utils.helper.assets import (
-    image_data_uri,
     local_card_bg_image,
+    read_image_data_uri,
 )
 from ..utils.helper.ai_bridge import emit_ai_text
 from ..utils.api.biligame_wiki import (
@@ -37,24 +35,19 @@ _timeline_card_cache: AsyncTtlCache[str, _CardCache] = AsyncTtlCache(
 )
 
 
-def _read_image_uri(path: Path) -> str:
-    return image_data_uri(path.read_bytes(), path.suffix)
-
-
 async def _resolve_image_uri(
     url: str,
     local_path: Path | None,
     semaphore: asyncio.Semaphore,
 ) -> str:
-    if local_path is not None and local_path.is_file() and local_path.stat().st_size > 0:
-        return await to_thread(_read_image_uri)(local_path)
+    cached = await read_image_data_uri(local_path)
+    if cached:
+        return cached
     if not url:
         return ""
     async with semaphore:
         path = await resolve_image(url, local_path)
-    if path is None:
-        return ""
-    return await to_thread(_read_image_uri)(path)
+    return await read_image_data_uri(path)
 
 
 async def _load_activity_images(

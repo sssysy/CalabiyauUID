@@ -1,13 +1,13 @@
 """卡拉彼丘帮助图渲染、默认贴图准备与 Steam 背景后台更新。"""
 
 import os
-import json
 import shutil
 import asyncio
 from pathlib import Path
 
 import aiofiles
 from PIL import Image, ImageDraw, ImageFilter, UnidentifiedImageError
+from pydantic import Field, BaseModel, ConfigDict, TypeAdapter
 
 from gsuid_core.sv import get_plugin_available_prefix
 from gsuid_core.pool import to_thread
@@ -108,62 +108,47 @@ def _build_help_footer() -> Image.Image:
     return footer
 
 
-def _parse_plugin_sv(item: object) -> PluginSV | None:
-    if not isinstance(item, dict):
-        return None
-    name = item["name"] if "name" in item else None
-    desc = item["desc"] if "desc" in item else None
-    eg = item["eg"] if "eg" in item else None
-    highlight = item["highlight"] if "highlight" in item else 0
-    need_ck = item["need_ck"] if "need_ck" in item else False
-    need_sk = item["need_sk"] if "need_sk" in item else False
-    need_admin = item["need_admin"] if "need_admin" in item else False
-    if (
-        not isinstance(name, str)
-        or not isinstance(desc, str)
-        or not isinstance(eg, str)
-        or not isinstance(highlight, int)
-        or not isinstance(need_ck, bool)
-        or not isinstance(need_sk, bool)
-        or not isinstance(need_admin, bool)
-    ):
-        return None
-    return PluginSV(
-        name=name,
-        desc=desc,
-        eg=eg,
-        highlight=highlight,
-        need_ck=need_ck,
-        need_sk=need_sk,
-        need_admin=need_admin,
-    )
+class _HelpItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    name: str
+    desc: str
+    eg: str
+    highlight: int = 0
+    need_ck: bool = False
+    need_sk: bool = False
+    need_admin: bool = False
+
+    def to_plugin_sv(self) -> PluginSV:
+        return PluginSV(
+            name=self.name,
+            desc=self.desc,
+            eg=self.eg,
+            highlight=self.highlight,
+            need_ck=self.need_ck,
+            need_sk=self.need_sk,
+            need_admin=self.need_admin,
+        )
 
 
-def _parse_help_data(raw: object) -> dict[str, PluginHelp]:
-    if not isinstance(raw, dict):
-        raise ValueError("help.json 根节点必须为字典")
-    result: dict[str, PluginHelp] = {}
-    for cag_name, cag_body in raw.items():
-        if not isinstance(cag_name, str) or not isinstance(cag_body, dict):
-            continue
-        desc = cag_body["desc"] if "desc" in cag_body else ""
-        raw_items = cag_body["data"] if "data" in cag_body else []
-        if not isinstance(desc, str) or not isinstance(raw_items, list):
-            continue
-        entries: list[PluginSV] = []
-        for item in raw_items:
-            parsed = _parse_plugin_sv(item)
-            if parsed is not None:
-                entries.append(parsed)
-        result[cag_name] = PluginHelp(desc=desc, data=entries)
-    return result
+class _HelpCategory(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    desc: str = ""
+    data: list[_HelpItem] = Field(default_factory=list)
+
+
+_HELP_DATA_ADAPTER: TypeAdapter[dict[str, _HelpCategory]] = TypeAdapter(dict[str, _HelpCategory])
 
 
 async def get_help_data() -> dict[str, PluginHelp]:
     """异步读取并校验 help.json。"""
     async with aiofiles.open(HELP_DATA, "rb") as file:
-        raw: object = json.loads(await file.read())
-    return _parse_help_data(raw)
+        parsed = _HELP_DATA_ADAPTER.validate_json(await file.read())
+    return {
+        cag_name: PluginHelp(desc=category.desc, data=[item.to_plugin_sv() for item in category.data])
+        for cag_name, category in parsed.items()
+    }
 
 
 @to_thread

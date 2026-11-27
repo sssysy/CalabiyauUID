@@ -3,37 +3,33 @@
 from gsuid_core.models import Event
 from gsuid_core.ai_core.register import ai_tools
 
-from ...utils.api.dakanu import (
-    DakanuError,
-    DakanuMatchTeam,
-    DakanuMatchPlayer,
-    is_valid_room_id,
-)
+from ...utils.api.dakanu.client import DakanuError
 from ...utils.helper.match_cache import get_match_detail
 from ...utils.database.model_bind import get_main_uid
 from ...utils.helper.player_resolve import resolve_player_input
+from ...utils.api.dakanu.models.match import DakanuMatchTeam, DakanuMatchPlayer, is_valid_room_id
 
 
 def _format_player_row(player: DakanuMatchPlayer) -> str:
     badges: list[str] = []
-    if player["isTarget"]:
+    if player.isTarget:
         badges.append("视角")
-    if player["mvp"]:
+    if player.mvp:
         badges.append("MVP")
-    elif player["svp"]:
+    elif player.svp:
         badges.append("SVP")
     badge_text = f" [{'/'.join(badges)}]" if badges else ""
-    kd_suffix = f"/倒地{player['knockdowns']}" if player["knockdowns"] is not None else ""
+    kd_suffix = f"/倒地{player.knockdowns}" if player.knockdowns is not None else ""
     return (
-        f"- {player['nickname']}（{player['roleName']}）{badge_text}："
-        f"K/D/A {player['kills']}/{player['deaths']}/{player['assists']}{kd_suffix}，"
-        f"伤害 {player['damage']}，评分 {player['score']}"
+        f"- {player.nickname}（{player.roleName}）{badge_text}："
+        f"K/D/A {player.kills}/{player.deaths}/{player.assists}{kd_suffix}，"
+        f"伤害 {player.damage}，评分 {player.score}"
     )
 
 
 def _format_team_block(team: DakanuMatchTeam) -> list[str]:
-    lines: list[str] = [f"【{team['label']}（{team['id']}）】"]
-    for player in team["players"]:
+    lines: list[str] = [f"【{team.label}（{team.id}）】"]
+    for player in team.players:
         lines.append(_format_player_row(player))
     return lines
 
@@ -85,7 +81,7 @@ async def calabiyau_query_match_detail(
     if detail is None:
         return f"暂未收录对局 {cleaned_room} 的详细记分板数据。"
 
-    teams = detail["teams"] if "teams" in detail else []
+    teams = detail.teams
     if not teams:
         return f"对局 {cleaned_room} 暂无双方阵容明细。"
 

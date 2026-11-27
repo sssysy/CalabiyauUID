@@ -5,8 +5,8 @@ from gsuid_core.bot import Bot
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
-from ..utils.api.dakanu import DakanuError
 from .community_services import build_activity_card, build_world_chat_card
+from ..utils.api.dakanu.client import DakanuError
 
 sv_activity = SV("卡拉彼丘活跃")
 

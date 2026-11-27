@@ -3,6 +3,8 @@
 import base64
 from pathlib import Path
 
+from gsuid_core.pool import to_thread
+
 from ..utils.paths import DATA_DIR, ASSET_DIR, CUSTOM_BG_PATH
 from ...calabiyau_config import CalabiyauConfig
 
@@ -161,3 +163,16 @@ def image_data_uri(content: bytes, suffix: str) -> str:
     normalized = suffix.lower()
     mime = mime_types[normalized] if normalized in mime_types else "image/webp"
     return f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+def _read_image_data_uri_sync(path: Path) -> str:
+    if not path.is_file() or path.stat().st_size <= 0:
+        return ""
+    return image_data_uri(path.read_bytes(), path.suffix)
+
+
+async def read_image_data_uri(path: Path | None) -> str:
+    """在线程池读取图片文件并编码为 data URI；文件缺失或为空返回空串。"""
+    if path is None:
+        return ""
+    return await to_thread(_read_image_data_uri_sync)(path)

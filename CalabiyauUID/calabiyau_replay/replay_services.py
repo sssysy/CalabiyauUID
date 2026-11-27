@@ -7,13 +7,11 @@ from gsuid_core.models import Message
 from gsuid_core.segment import MessageSegment
 
 from ..calabiyau_config import CalabiyauConfig
-from ..utils.api.dakanu import (
-    DakanuError,
-    is_valid_room_id,
-    fetch_replay_download_ticket,
-)
 from ..utils.downloader import download_replay, find_cached_replay
 from ..utils.utils.cache import KeyedLockPool
+from ..utils.api.dakanu.client import DakanuError
+from ..utils.api.dakanu.requests import fetch_replay_download_ticket
+from ..utils.api.dakanu.models.match import is_valid_room_id
 
 _room_locks: KeyedLockPool[str] = KeyedLockPool()
 

@@ -7,8 +7,8 @@ from collections.abc import Callable
 from gsuid_core.ai_core.configs.ai_config import ai_config
 
 from .maps import resolve_role_name
-from ..api.dakanu import DakanuProfile
 from .player_data import PlayerSnapshot
+from ..api.dakanu.models.player import DakanuProfile
 
 
 def emit_ai_text(text: str) -> None:
@@ -32,52 +32,52 @@ def format_player_snapshot_summary(
 ) -> str:
     """从玩家快照提取供 AI 决策与复盘的结构化文本摘要。"""
     profile = profile_override if profile_override is not None else snapshot.profile
-    player = profile["player"]
-    rank = profile["rank"]
-    summary = profile["summary"]
-    presence = profile["presence"]
-    season_label = profile["meta"]["currentSeason"]
-    tier_label = tier_name_fn(rank["segment"])
-    season_top_label = tier_name_fn(max(rank["topSegment"], rank["segment"]))
-    top_tier_label = tier_name_fn(rank["historicalSegment"])
+    player = profile.player
+    rank = profile.rank
+    summary = profile.summary
+    presence = profile.presence
+    season_label = profile.meta.currentSeason
+    tier_label = tier_name_fn(rank.segment)
+    season_top_label = tier_name_fn(max(rank.topSegment, rank.segment))
+    top_tier_label = tier_name_fn(rank.historicalSegment)
     saved_time = datetime.fromtimestamp(snapshot.saved_at).strftime("%Y-%m-%d %H:%M")
-    clan_name = snapshot.clan["name"] if snapshot.clan is not None else (player["clanId"] or "无")
-    rank_pos = str(rank["rankPos"]) if rank["rankPos"] is not None else "未上榜"
+    clan_name = snapshot.clan.name if snapshot.clan is not None else (player.clanId or "无")
+    rank_pos = str(rank.rankPos) if rank.rankPos is not None else "未上榜"
 
     if is_season_view:
         lines = [
-            f"【卡拉彼丘 {season_label} 战绩总览：{player['nickname']}（UID：{player['id']}）】",
-            f"等级：Lv.{player['level']} | 战队：{clan_name} | 隐私：{player['privacyStatus']}",
-            f"赛季段位：{tier_label}（{rank['divisionScore']} 分，赛季最高：{season_top_label}，历史最高：{top_tier_label}，排名：{rank_pos}）",
+            f"【卡拉彼丘 {season_label} 战绩总览：{player.nickname}（UID：{player.id}）】",
+            f"等级：Lv.{player.level} | 战队：{clan_name} | 隐私：{player.privacyStatus}",
+            f"赛季段位：{tier_label}（{rank.divisionScore} 分，赛季最高：{season_top_label}，历史最高：{top_tier_label}，排名：{rank_pos}）",
         ]
     else:
         lines = [
-            f"【卡拉彼丘战绩总览：{player['nickname']}（UID：{player['id']}，赛季：{season_label}）】",
-            f"等级：Lv.{player['level']} | 战队：{clan_name} | 在线状态：{presence['state']} | 隐私：{player['privacyStatus']}",
-            f"排位段位：{tier_label}（{rank['divisionScore']} 分，历史最高：{top_tier_label}，排名：{rank_pos}）",
+            f"【卡拉彼丘战绩总览：{player.nickname}（UID：{player.id}，赛季：{season_label}）】",
+            f"等级：Lv.{player.level} | 战队：{clan_name} | 在线状态：{presence.state} | 隐私：{player.privacyStatus}",
+            f"排位段位：{tier_label}（{rank.divisionScore} 分，历史最高：{top_tier_label}，排名：{rank_pos}）",
         ]
     if challenge_label:
         lines.append(f"挑战段位：{challenge_label}")
     overview_prefix = f"{season_label} 赛季总览：" if is_season_view else "生涯总览："
     lines.append(
-        f"{overview_prefix}{summary['rounds']} 场 / {summary['wins']} 胜（胜率 {summary['winRate'] * 100:.1f}%），"
-        f"KD {summary['kd']:.2f}，KDA {summary['kda']:.2f}，"
-        f"场均伤害 {summary['avgDamage']:.0f}，回合均伤 {summary['roundAveDamage']:.0f}，"
-        f"MVP 率 {summary['mvpRate'] * 100:.1f}%，爆头率 {summary['headshotRate'] * 100:.1f}%"
+        f"{overview_prefix}{summary.rounds} 场 / {summary.wins} 胜（胜率 {summary.winRate * 100:.1f}%），"
+        f"KD {summary.kd:.2f}，KDA {summary.kda:.2f}，"
+        f"场均伤害 {summary.avgDamage:.0f}，回合均伤 {summary.roundAveDamage:.0f}，"
+        f"MVP 率 {summary.mvpRate * 100:.1f}%，爆头率 {summary.headshotRate * 100:.1f}%"
     )
-    if profile["modes"]:
+    if profile.modes:
         mode_parts = [
-            f"{mode['label']}({mode['rounds']}场/胜率{mode['winRate'] * 100:.1f}%/KD {mode['kd']:.2f})"
-            for mode in profile["modes"][:5]
+            f"{mode.label}({mode.rounds}场/胜率{mode.winRate * 100:.1f}%/KD {mode.kd:.2f})"
+            for mode in profile.modes[:5]
         ]
         lines.append("分模式：" + "；".join(mode_parts))
-    if profile["roles"]:
+    if profile.roles:
         role_parts = [
             (
-                f"{resolve_role_name(role['roleId']) or role['name']}"
-                f"({role['count']}场/胜率{role['winRate'] * 100:.1f}%/KD {role['kd']:.2f}/均伤{role['avgDamage']:.0f})"
+                f"{resolve_role_name(role.roleId) or role.name}"
+                f"({role.count}场/胜率{role.winRate * 100:.1f}%/KD {role.kd:.2f}/均伤{role.avgDamage:.0f})"
             )
-            for role in profile["roles"][:5]
+            for role in profile.roles[:5]
         ]
         lines.append("常用超弦体 Top5：" + "；".join(role_parts))
     if is_season_view:

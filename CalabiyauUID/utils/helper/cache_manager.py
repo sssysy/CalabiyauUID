@@ -18,6 +18,7 @@ from ..utils.paths import (
 )
 from ..utils.background import cancel_all_background_tasks
 from ...calabiyau_config import CalabiyauConfig
+from ..api.dakanu.client import close_dakanu_client
 
 _LOG_TAG = "[卡拉彼丘·缓存清理]"
 _SECONDS_PER_DAY = 86400.0
@@ -188,5 +189,6 @@ async def shutdown_calabiyau_runtime() -> None:
     """停机或热重载时统一取消后台任务并释放内存缓存。"""
     cancelled_tasks = await cancel_all_background_tasks()
     await close_registered_memory_caches()
+    await close_dakanu_client()
     if cancelled_tasks > 0:
         logger.info(f"{_LOG_TAG} 停机收尾已取消 {cancelled_tasks} 个后台任务并释放内存缓存")

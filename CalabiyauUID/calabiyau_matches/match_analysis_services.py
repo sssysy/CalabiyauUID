@@ -12,22 +12,20 @@ from PIL import Image
 from gsuid_core.pool import to_thread
 from gsuid_core.logger import logger
 
-from ..utils.api.dakanu import (
-    DakanuError,
+from ..utils.downloader import resolve_image
+from ..utils.helper.assets import local_role_image, local_faction_image, read_image_data_uri
+from ..utils.api.dakanu.assets import role_image_url
+from ..utils.api.dakanu.client import DakanuError
+from ..utils.helper.match_cache import get_match_detail, get_match_statistics
+from ..utils.api.dakanu.models.match import DakanuMatchDetail, DakanuMatchPlayer, is_valid_room_id
+from ..utils.api.dakanu.models.match_stats import (
     DakanuStatsTeam,
-    DakanuMatchDetail,
-    DakanuMatchPlayer,
     DakanuStatsPlayer,
     DakanuStatsAccuracy,
     DakanuMatchStatistics,
     DakanuStatsRoundPlayer,
     DakanuStatsRoundResult,
-    role_image_url,
-    is_valid_room_id,
 )
-from ..utils.downloader import resolve_image
-from ..utils.helper.assets import image_data_uri, local_role_image, local_faction_image
-from ..utils.helper.match_cache import get_match_detail, get_match_statistics
 from ..utils.render.html.renderer.match_analysis_card import (
     MatchAnalysisPlayerRow,
     MatchAnalysisRoundItem,
@@ -101,15 +99,12 @@ def _format_duration_ms(duration_ms: int) -> str:
     return f"{total_seconds // 60}:{total_seconds % 60:02d}"
 
 
-def _read_image_uri(path: Path) -> str:
-    return image_data_uri(path.read_bytes(), path.suffix)
-
-
 async def _resolve_role_uri(role_id: int) -> str:
+    cached = await read_image_data_uri(local_role_image(role_id))
+    if cached:
+        return cached
     path = await resolve_image(role_image_url(role_id), local_role_image(role_id))
-    if path is None:
-        return ""
-    return await to_thread(_read_image_uri)(path)
+    return await read_image_data_uri(path)
 
 
 async def _load_role_uris(role_ids: set[int]) -> dict[int, str]:
@@ -355,16 +350,14 @@ def _extract_detail_maps(
     match_mode = ""
     if detail is None:
         return detail_players, detail_team_side, match_mode
-    if "matchMode" in detail:
-        match_mode = detail["matchMode"]
-    if "teams" in detail:
-        for team in detail["teams"]:
-            raw_id = team["id"]
-            numeric_id = raw_id.split("_")[-1] if "_" in raw_id else raw_id
-            if "side" in team and team["side"]:
-                detail_team_side[numeric_id] = team["side"]
-            for player in team["players"]:
-                detail_players[player["playerId"]] = player
+    match_mode = detail.matchMode
+    for team in detail.teams:
+        raw_id = team.id
+        numeric_id = raw_id.split("_")[-1] if "_" in raw_id else raw_id
+        if team.side:
+            detail_team_side[numeric_id] = team.side
+        for player in team.players:
+            detail_players[player.playerId] = player
     return detail_players, detail_team_side, match_mode
 
 
@@ -406,36 +399,36 @@ def _build_team_summary(
         observed = stats_player.observed_scores if stats_player is not None else None
 
         role_id: int | None = None
-        if detail_player is not None and detail_player["roleId"] > 0:
-            role_id = detail_player["roleId"]
+        if detail_player is not None and detail_player.roleId > 0:
+            role_id = detail_player.roleId
         elif stats_player is not None and stats_player.role_id is not None and stats_player.role_id > 0:
             role_id = stats_player.role_id
         role_uri = role_uris[role_id] if role_id is not None and role_id in role_uris else ""
 
         if detail_player is not None:
-            nickname = detail_player["nickname"]
-            kills = detail_player["kills"]
-            deaths = detail_player["deaths"]
-            assists = detail_player["assists"]
-            damage = detail_player["damage"]
-            total_score = detail_player["score"]
+            nickname = detail_player.nickname
+            kills = detail_player.kills
+            deaths = detail_player.deaths
+            assists = detail_player.assists
+            damage = detail_player.damage
+            total_score = detail_player.score
             personal_score = (
-                detail_player["personalScore"]
-                if detail_player["personalScore"] is not None
+                detail_player.personalScore
+                if detail_player.personalScore is not None
                 else (round(observed.personal_score) if observed is not None else 0)
             )
             strategy_score = (
-                detail_player["strategyScore"]
-                if detail_player["strategyScore"] is not None
+                detail_player.strategyScore
+                if detail_player.strategyScore is not None
                 else (round(observed.strategy_score) if observed is not None else 0)
             )
             teamwork_score = (
-                detail_player["teamworkScore"]
-                if detail_player["teamworkScore"] is not None
+                detail_player.teamworkScore
+                if detail_player.teamworkScore is not None
                 else (round(observed.teamwork_score) if observed is not None else 0)
             )
-            is_mvp = detail_player["mvp"]
-            is_svp = detail_player["svp"]
+            is_mvp = detail_player.mvp
+            is_svp = detail_player.svp
         else:
             nickname = stats_player.nickname if stats_player is not None and stats_player.nickname else player_id
             kills = stats_player.kills if stats_player is not None else 0
@@ -508,15 +501,15 @@ def _build_round_team_col(
         detail_player = detail_players[player_id] if player_id in detail_players else None
 
         if detail_player is not None:
-            nickname = detail_player["nickname"]
+            nickname = detail_player.nickname
         elif stats_player is not None and stats_player.nickname:
             nickname = stats_player.nickname
         else:
             nickname = player_id
 
         role_id = role_resolver(player_id, round_index)
-        if role_id is None and detail_player is not None and detail_player["roleId"] > 0:
-            role_id = detail_player["roleId"]
+        if role_id is None and detail_player is not None and detail_player.roleId > 0:
+            role_id = detail_player.roleId
         if role_id is None and stats_player is not None:
             role_id = stats_player.role_id
         role_uri = role_uris[role_id] if role_id is not None and role_id in role_uris else ""

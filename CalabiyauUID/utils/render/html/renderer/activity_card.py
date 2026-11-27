@@ -4,7 +4,7 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from ..render import CardTemplateContext, render_card, render_template
-from ....api.dakanu import DakanuGameActivity
+from ....api.dakanu.models.community import DakanuGameActivity
 
 _CHART_WIDTH = 920.0
 _CHART_HEIGHT = 336.0
@@ -102,16 +102,16 @@ def _badge_position(x: float, y: float, *, prefer_above: bool) -> tuple[str, str
 
 def build_activity_context(activity: DakanuGameActivity) -> ActivityTemplateContext:
     """把 Dakanu 活跃趋势接口响应整理为模板上下文。"""
-    est_points = activity["estimate"]["points"]
+    est_points = activity.estimate.points
     last_est = est_points[-1] if est_points else None
-    daily_text = f"{last_est['daily']:,}" if last_est is not None else "—"
-    active30_text = f"{last_est['active30d']:,}" if last_est is not None else "—"
+    daily_text = f"{last_est.daily:,}" if last_est is not None else "—"
+    active30_text = f"{last_est.active30d:,}" if last_est is not None else "—"
 
-    range_val = activity["range"]
+    range_val = activity.range
     range_label = _RANGE_LABELS[range_val] if range_val in _RANGE_LABELS else range_val
-    region_label = activity["region"].upper() if activity["region"] else "CN"
+    region_label = activity.region.upper() if activity.region else "CN"
 
-    pts = activity["points"]
+    pts = activity.points
     if not pts:
         return ActivityTemplateContext(
             range_label=range_label,
@@ -121,7 +121,7 @@ def build_activity_context(activity: DakanuGameActivity) -> ActivityTemplateCont
             has_points=False,
         )
 
-    indices = [float(pt["index"]) for pt in pts]
+    indices = [float(pt.index) for pt in pts]
     raw_min = min(indices)
     raw_max = max(indices)
     span = raw_max - raw_min
@@ -132,16 +132,16 @@ def build_activity_context(activity: DakanuGameActivity) -> ActivityTemplateCont
         y_max = min(100.0, y_min + 10.0)
     y_span = y_max - y_min
 
-    t_start = pts[0]["at"]
-    t_end = pts[-1]["at"]
+    t_start = pts[0].at
+    t_end = pts[-1].at
     t_span = max(1, t_end - t_start)
 
     coords: list[tuple[int, float, float, float]] = []
     for pt in pts:
-        x = _PAD_LEFT + ((pt["at"] - t_start) / t_span) * _PLOT_WIDTH
-        val = float(pt["index"])
+        x = _PAD_LEFT + ((pt.at - t_start) / t_span) * _PLOT_WIDTH
+        val = float(pt.index)
         y = _PAD_TOP + _PLOT_HEIGHT * (1.0 - (val - y_min) / y_span)
-        coords.append((pt["at"], val, x, y))
+        coords.append((pt.at, val, x, y))
 
     grid_lines: list[GridLineItem] = []
     for idx in range(5):

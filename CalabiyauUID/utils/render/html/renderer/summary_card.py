@@ -7,10 +7,13 @@ from collections.abc import Mapping
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
 from .matches_card import MatchCardItem, MatchCardAssets, build_match_card_item
-from ....api.dakanu import (
+from ....helper.maps import ROLE_POSITIONS, resolve_role_meta, get_role_display_names
+from ....helper.recent_matches import MatchView
+from ....api.dakanu.models.match import DakanuMatch
+from ....api.dakanu.models.player import (
     DakanuMode,
     DakanuRole,
-    DakanuMatch,
+    DakanuMedal,
     DakanuRival,
     DakanuPlayer,
     DakanuTeamUp,
@@ -19,8 +22,6 @@ from ....api.dakanu import (
     DakanuSummary,
     DakanuPresence,
 )
-from ....helper.maps import ROLE_POSITIONS, resolve_role_meta, get_role_display_names
-from ....helper.recent_matches import MatchView
 
 _TREND_POINTS = 20
 _RECENT_FORM_LIMIT = 20
@@ -534,32 +535,30 @@ def _challenge_segment_from_score(score: int) -> int:
 
 def resolve_challenge_tier(leisure: DakanuLeisure | None, presence: DakanuPresence | None) -> int:
     """按挑战赛档案或在线状态兜底计算挑战赛图标编号；无数据时返回 0。"""
-    if leisure is not None and "segment" in leisure:
-        seg = leisure["segment"]
+    if leisure is not None and leisure.segment is not None:
+        seg = leisure.segment
         if 1 <= seg <= 41:
             return challenge_tier_index(seg)
     if presence is not None:
-        if "leisureSegment" in presence and isinstance(presence["leisureSegment"], int):
-            idx = challenge_tier_index(presence["leisureSegment"])
+        if presence.leisureSegment is not None:
+            idx = challenge_tier_index(presence.leisureSegment)
             if idx > 0:
                 return idx
-        if "leisureScore" in presence and isinstance(presence["leisureScore"], int):
-            seg = _challenge_segment_from_score(presence["leisureScore"])
+        if presence.leisureScore is not None:
+            seg = _challenge_segment_from_score(presence.leisureScore)
             return challenge_tier_index(seg)
     return 0
 
 
 def extract_medal_ids(player: DakanuPlayer) -> list[int]:
     """提取玩家基板佩戴的勋章 ID（按出现顺序去重）。"""
-    if "medals" not in player:
-        return []
     medal_ids: list[int] = []
     seen: set[int] = set()
-    for item in player["medals"]:
+    for item in player.medals:
         if isinstance(item, int):
             medal_id = item
-        elif isinstance(item, dict) and "id" in item and isinstance(item["id"], int):
-            medal_id = item["id"]
+        elif isinstance(item, DakanuMedal) and item.id is not None:
+            medal_id = item.id
         else:
             continue
         if medal_id > 0 and medal_id not in seen:
@@ -569,14 +568,14 @@ def extract_medal_ids(player: DakanuPlayer) -> list[int]:
 
 
 def _trend_matches(profile: DakanuProfile) -> list[DakanuMatch]:
-    matches = [match for match in profile["matches"] if "RANK" in match["mode"] and match["divisionScore"] is not None][
+    matches = [match for match in profile.matches if "RANK" in match.mode and match.divisionScore is not None][
         :_TREND_POINTS
     ]
     if matches:
         return list(reversed(matches))
-    history = [
-        match for match in profile["historyMatches"] if "RANK" in match["mode"] and match["divisionScore"] is not None
-    ][:_TREND_POINTS]
+    history = [match for match in profile.historyMatches if "RANK" in match.mode and match.divisionScore is not None][
+        :_TREND_POINTS
+    ]
     return list(reversed(history))
 
 
@@ -598,18 +597,18 @@ def _trend_badge_position(x: float, y: float, *, prefer_above: bool) -> tuple[st
 
 def _build_trend(profile: DakanuProfile) -> TrendBlock:
     matches = _trend_matches(profile)
-    rank = profile["rank"]
-    scores = [match["divisionScore"] for match in matches if match["divisionScore"] is not None]
+    rank = profile.rank
+    scores = [match.divisionScore for match in matches if match.divisionScore is not None]
     net = scores[-1] - scores[0] if len(scores) >= 2 else 0
-    wins = sum(1 for match in matches if match["result"] == "win")
-    losses = sum(1 for match in matches if match["result"] == "lose")
-    draws = sum(1 for match in matches if match["result"] == "draw")
-    tier_label, tier_color, _ = _tier(rank["segment"])
+    wins = sum(1 for match in matches if match.result == "win")
+    losses = sum(1 for match in matches if match.result == "lose")
+    draws = sum(1 for match in matches if match.result == "draw")
+    tier_label, tier_color, _ = _tier(rank.segment)
     net_class = "is-up" if net >= 0 else "is-down"
     net_text = f"+{net}" if net >= 0 else str(net)
-    grade_score = rank["gradeScore"] if "gradeScore" in rank else 0
-    display_score = rank["divisionScore"] if rank["divisionScore"] > 0 else grade_score
-    score_text = f"当前段位分 {display_score}" if rank["divisionScore"] > 0 else f"当前积分 {display_score}"
+    grade_score = rank.gradeScore
+    display_score = rank.divisionScore if rank.divisionScore > 0 else grade_score
+    score_text = f"当前段位分 {display_score}" if rank.divisionScore > 0 else f"当前积分 {display_score}"
 
     has_chart = len(matches) >= 2 and len(scores) >= 2
     if not has_chart:
@@ -654,12 +653,12 @@ def _build_trend(profile: DakanuProfile) -> TrendBlock:
     coords: list[tuple[int, int, float, float]] = []
     count = len(matches)
     for index, match in enumerate(matches):
-        score = match["divisionScore"]
+        score = match.divisionScore
         if score is None:
             continue
         x_pos = _TREND_PAD_LEFT + index * (_TREND_PLOT_WIDTH / max(1, count - 1))
         y_pos = _TREND_PAD_TOP + _TREND_PLOT_HEIGHT * (1.0 - (float(score) - y_min) / y_span)
-        coords.append((match["playedAt"], score, x_pos, y_pos))
+        coords.append((match.playedAt, score, x_pos, y_pos))
 
     grid_lines: list[TrendGridLine] = []
     for idx in range(5):
@@ -774,34 +773,34 @@ async def render_empty_summary_card(message: str) -> bytes:
 
 
 def _build_role_item(role: DakanuRole, image: str, max_count: int) -> RoleItem:
-    meta = resolve_role_meta(role["roleId"])
-    bar_pct = max(4, round(role["count"] / max(1, max_count) * 100))
+    meta = resolve_role_meta(role.roleId)
+    bar_pct = max(4, round(role.count / max(1, max_count) * 100))
     return RoleItem(
         image=image,
-        name=role["name"],
+        name=role.name,
         faction_name=meta.faction_name if meta is not None else "",
         faction_color=meta.faction_text_color if meta is not None else "",
         position_name=meta.position_name if meta is not None else "",
-        win_rate=_pct(role["winRate"]),
-        count=role["count"],
-        kd=f"{role['kd']:.2f}",
-        avg_damage=_num(role["avgDamage"]),
-        max_kill=role["maxKill"],
+        win_rate=_pct(role.winRate),
+        count=role.count,
+        kd=f"{role.kd:.2f}",
+        avg_damage=_num(role.avgDamage),
+        max_kill=role.maxKill,
         bar_pct=str(bar_pct),
     )
 
 
 def _build_mode_item(mode: DakanuMode) -> ModeItem:
     return ModeItem(
-        label=mode["label"],
-        rounds=mode["rounds"],
-        win_rate=_pct(mode["winRate"]),
-        kd=f"{mode['kd']:.2f}",
-        avg_damage=_num(mode["avgDamage"]),
-        round_avg_damage=f"{mode['roundAveDamage']:.1f}",
-        avg_kill=f"{mode['avgKill']:.2f}",
-        headshot_rate=_pct(mode["headshotRate"]),
-        mvp_rate=_pct(mode["mvpRate"]),
+        label=mode.label,
+        rounds=mode.rounds,
+        win_rate=_pct(mode.winRate),
+        kd=f"{mode.kd:.2f}",
+        avg_damage=_num(mode.avgDamage),
+        round_avg_damage=f"{mode.roundAveDamage:.1f}",
+        avg_kill=f"{mode.avgKill:.2f}",
+        headshot_rate=_pct(mode.headshotRate),
+        mvp_rate=_pct(mode.mvpRate),
     )
 
 
@@ -814,26 +813,26 @@ def _build_challenge_block(assets: SummaryAssets, presence: DakanuPresence) -> C
     star = 0
     star_score = 0
     if leisure is not None:
-        if "score" in leisure and isinstance(leisure["score"], int):
-            score = leisure["score"]
-        if "segment" in leisure and isinstance(leisure["segment"], int):
-            segment = leisure["segment"]
-        if "star" in leisure and isinstance(leisure["star"], int):
-            star = leisure["star"]
-        if "starScore" in leisure and isinstance(leisure["starScore"], int):
-            star_score = leisure["starScore"]
-        if "winRate" in leisure and isinstance(leisure["winRate"], (int, float)):
-            win_rate = float(leisure["winRate"])
-        has_detail = "battles" in leisure
+        if leisure.score is not None:
+            score = leisure.score
+        if leisure.segment is not None:
+            segment = leisure.segment
+        if leisure.star is not None:
+            star = leisure.star
+        if leisure.starScore is not None:
+            star_score = leisure.starScore
+        if leisure.winRate is not None:
+            win_rate = float(leisure.winRate)
+        has_detail = leisure.battles is not None
     elif assets.is_season_view:
         return None
     else:
-        if "leisureScore" in presence and isinstance(presence["leisureScore"], int):
-            score = presence["leisureScore"]
-        if "leisureSegment" in presence and isinstance(presence["leisureSegment"], int):
-            segment = presence["leisureSegment"]
-        if "stars" in presence and isinstance(presence["stars"], int):
-            star = presence["stars"]
+        if presence.leisureScore is not None:
+            score = presence.leisureScore
+        if presence.leisureSegment is not None:
+            segment = presence.leisureSegment
+        if presence.stars is not None:
+            star = presence.stars
 
     if segment <= 0 and score > 0:
         segment = _challenge_segment_from_score(score)
@@ -851,7 +850,7 @@ def _build_challenge_block(assets: SummaryAssets, presence: DakanuPresence) -> C
         progress_pct = "100"
     else:
         _, d_from, d_to, req_stars = divisions[(segment - 1) % 5]
-        if leisure is not None and "starScore" in leisure:
+        if leisure is not None and leisure.starScore is not None:
             progress_label = "星级进展"
             progress_text = f"{star_score} / {req_stars}"
             progress_pct = str(max(0, min(100, round(star_score / max(1, req_stars) * 100))))
@@ -874,9 +873,7 @@ def _build_challenge_block(assets: SummaryAssets, presence: DakanuPresence) -> C
 
 
 def _build_medals(player: DakanuPlayer, medal_images: Mapping[int, str]) -> tuple[MedalItem, ...]:
-    if "medals" not in player:
-        return ()
-    raw_medals = player["medals"]
+    raw_medals = player.medals
     parsed: list[tuple[int, list[int] | None, float, float, bool]] = []
     for item in raw_medals:
         if isinstance(item, int):
@@ -885,16 +882,12 @@ def _build_medals(player: DakanuPlayer, medal_images: Mapping[int, str]) -> tupl
             zoom = 1.0
             rot = 0.0
             flip = False
-        elif isinstance(item, dict) and "id" in item and isinstance(item["id"], int):
-            mid = item["id"]
-            raw_axis = item["axis"] if "axis" in item else None
-            axis = raw_axis if isinstance(raw_axis, list) and len(raw_axis) >= 2 else None
-            raw_zoom = item["zoomScale"] if "zoomScale" in item else None
-            zoom = float(raw_zoom) if isinstance(raw_zoom, (int, float)) and raw_zoom > 0 else 1.0
-            raw_rot = item["rotateScale"] if "rotateScale" in item else None
-            rot = float(raw_rot) if isinstance(raw_rot, (int, float)) else 0.0
-            raw_flip = item["levelFlip"] if "levelFlip" in item else False
-            flip = bool(raw_flip)
+        elif isinstance(item, DakanuMedal) and item.id is not None:
+            mid = item.id
+            axis = item.axis if item.axis is not None and len(item.axis) >= 2 else None
+            zoom = item.zoomScale if item.zoomScale is not None and item.zoomScale > 0 else 1.0
+            rot = item.rotateScale if item.rotateScale is not None else 0.0
+            flip = item.levelFlip
         else:
             continue
         if mid in medal_images and medal_images[mid]:
@@ -927,35 +920,33 @@ def _build_medals(player: DakanuPlayer, medal_images: Mapping[int, str]) -> tupl
 
 
 def _build_ranked_strip(modes: list[DakanuMode]) -> RankedStripBlock | None:
-    active = [mode for mode in modes if mode["rounds"] > 0]
+    active = [mode for mode in modes if mode.rounds > 0]
     if not active:
         return None
-    target = next((mode for mode in active if mode["mode"] == "RoomMode_RANK_BOMB"), None)
+    target = next((mode for mode in active if mode.mode == "RoomMode_RANK_BOMB"), None)
     if target is None:
-        bomb_modes = [
-            mode for mode in active if "BOMB" in mode["mode"].upper() and "ZOMBIE" not in mode["mode"].upper()
-        ]
+        bomb_modes = [mode for mode in active if "BOMB" in mode.mode.upper() and "ZOMBIE" not in mode.mode.upper()]
         if bomb_modes:
-            target = max(bomb_modes, key=lambda item: item["rounds"])
+            target = max(bomb_modes, key=lambda item: item.rounds)
     if target is None:
         return None
-    if "kda" in target and isinstance(target["kda"], (int, float)):
-        kda_val = float(target["kda"])
+    if target.kda is not None:
+        kda_val = float(target.kda)
     else:
-        kda_val = target["kd"]
+        kda_val = target.kd
     return RankedStripBlock(
-        rounds=target["rounds"],
-        wins=target["wins"],
-        win_rate=_pct(target["winRate"]),
+        rounds=target.rounds,
+        wins=target.wins,
+        win_rate=_pct(target.winRate),
         kda=f"{kda_val:.2f}",
-        kd=f"{target['kd']:.2f}",
-        round_avg_damage=f"{target['roundAveDamage']:.1f}",
+        kd=f"{target.kd:.2f}",
+        round_avg_damage=f"{target.roundAveDamage:.1f}",
     )
 
 
 def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -> RecentFormBlock:
-    recent = profile["matches"][:_RECENT_FORM_LIMIT]
-    valid = [match for match in recent if match["result"] != "unknown"]
+    recent = profile.matches[:_RECENT_FORM_LIMIT]
+    valid = [match for match in recent if match.result != "unknown"]
     if not valid:
         return RecentFormBlock(
             has_data=False,
@@ -971,22 +962,18 @@ def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -
             top_roles=(),
             positions=(),
         )
-    wins = sum(1 for match in valid if match["result"] == "win")
-    losses = sum(1 for match in valid if match["result"] == "lose")
-    draws = sum(1 for match in valid if match["result"] == "draw")
+    wins = sum(1 for match in valid if match.result == "win")
+    losses = sum(1 for match in valid if match.result == "lose")
+    draws = sum(1 for match in valid if match.result == "draw")
     games = len(valid)
     win_rate_pct = round(wins / games * 100)
     kda_matches = [
-        match
-        for match in recent
-        if match["kills"] is not None and match["deaths"] is not None and match["assists"] is not None
+        match for match in recent if match.kills is not None and match.deaths is not None and match.assists is not None
     ]
-    total_k = sum(match["kills"] for match in kda_matches if match["kills"] is not None)
-    total_d = sum(match["deaths"] for match in kda_matches if match["deaths"] is not None)
-    total_a = sum(match["assists"] for match in kda_matches if match["assists"] is not None)
-    total_tk = sum(
-        match["teamKills"] for match in kda_matches if "teamKills" in match and match["teamKills"] is not None
-    )
+    total_k = sum(match.kills for match in kda_matches if match.kills is not None)
+    total_d = sum(match.deaths for match in kda_matches if match.deaths is not None)
+    total_a = sum(match.assists for match in kda_matches if match.assists is not None)
+    total_tk = sum(match.teamKills for match in kda_matches if match.teamKills is not None)
     kda_ratio = (total_k + total_a) / total_d if total_d > 0 else float(total_k + total_a)
     kp_text = f"{round((total_k + total_a) / total_tk * 100)}%" if total_tk > 0 else "—"
     match_denom = max(1, len(kda_matches))
@@ -997,31 +984,31 @@ def _build_recent_form(profile: DakanuProfile, role_images: Mapping[int, str]) -
     )
 
     role_names_map: dict[int, str] = dict(get_role_display_names())
-    for role in profile["roles"]:
-        role_names_map[role["roleId"]] = role["name"]
+    for role in profile.roles:
+        role_names_map[role.roleId] = role.name
 
     role_agg: dict[int, dict[str, int]] = {}
     pos_counts: dict[int, int] = {code: 0 for code in ROLE_POSITIONS}
     for match in recent:
-        rid = match["roleId"]
+        rid = match.roleId
         if rid is None or rid <= 0:
             continue
         if rid not in role_agg:
             role_agg[rid] = {"games": 0, "wins": 0, "losses": 0, "draws": 0, "k": 0, "d": 0, "a": 0}
         bucket = role_agg[rid]
         bucket["games"] += 1
-        if match["result"] == "win":
+        if match.result == "win":
             bucket["wins"] += 1
-        elif match["result"] == "lose":
+        elif match.result == "lose":
             bucket["losses"] += 1
-        elif match["result"] == "draw":
+        elif match.result == "draw":
             bucket["draws"] += 1
-        if match["kills"] is not None:
-            bucket["k"] += match["kills"]
-        if match["deaths"] is not None:
-            bucket["d"] += match["deaths"]
-        if match["assists"] is not None:
-            bucket["a"] += match["assists"]
+        if match.kills is not None:
+            bucket["k"] += match.kills
+        if match.deaths is not None:
+            bucket["d"] += match.deaths
+        if match.assists is not None:
+            bucket["a"] += match.assists
         meta = resolve_role_meta(rid)
         if meta is not None and meta.position_code in pos_counts:
             pos_counts[meta.position_code] += 1
@@ -1077,7 +1064,7 @@ def _build_activity_hours(matches: list[DakanuMatch]) -> ActivityHoursBlock:
     counts = [0] * 24
     sample = 0
     for match in matches[:_ACTIVITY_HOURS_LIMIT]:
-        played_at = match["playedAt"]
+        played_at = match.playedAt
         if played_at > 0:
             counts[datetime.fromtimestamp(played_at).hour] += 1
             sample += 1
@@ -1109,11 +1096,8 @@ def _build_activity_hours(matches: list[DakanuMatch]) -> ActivityHoursBlock:
 
 
 def _season_started_at(profile: DakanuProfile) -> int | None:
-    meta = profile["meta"]
-    if "currentSeasonStartedAt" not in meta:
-        return None
-    started_at = meta["currentSeasonStartedAt"]
-    if isinstance(started_at, int) and started_at > 0:
+    started_at = profile.meta.currentSeasonStartedAt
+    if started_at is not None and started_at > 0:
         return started_at
     return None
 
@@ -1128,15 +1112,15 @@ def select_current_season_matches(
         return []
     seen_rooms: set[str] = set()
     candidates: list[DakanuMatch] = []
-    for match in profile["matches"]:
-        if match["playedAt"] < started_at:
+    for match in profile.matches:
+        if match.playedAt is None or match.playedAt < started_at:
             continue
-        room_id = match["roomId"]
+        room_id = match.roomId
         if room_id in seen_rooms:
             continue
         seen_rooms.add(room_id)
         candidates.append(match)
-    candidates.sort(key=lambda item: item["playedAt"], reverse=True)
+    candidates.sort(key=lambda item: item.playedAt or 0, reverse=True)
     return candidates[:limit]
 
 
@@ -1156,108 +1140,104 @@ def _build_recent_matches(
 
 
 def _build_team_ups(profile: DakanuProfile, avatar_images: Mapping[int, str]) -> tuple[RelationshipItem, ...]:
-    if "teamUps" not in profile:
-        return ()
     items: list[RelationshipItem] = []
-    entries: list[DakanuTeamUp] = profile["teamUps"][:5]
+    entries: list[DakanuTeamUp] = profile.teamUps[:5]
     for entry in entries:
-        aid = entry["avatarId"]
+        aid = entry.avatarId
         avatar = avatar_images[aid] if aid in avatar_images else ""
-        draw_part = f" {entry['teamedDraws']}平" if entry["teamedDraws"] > 0 else ""
+        draw_part = f" {entry.teamedDraws}平" if entry.teamedDraws > 0 else ""
         items.append(
             RelationshipItem(
                 avatar=avatar,
-                initial=entry["nickname"][:1] or "?",
-                nickname=entry["nickname"],
-                meta_text=f"同队 {entry['teamedGames']} 场 · {entry['teamedWins']}胜 {entry['teamedLosses']}负{draw_part}",
-                win_rate=_pct(entry["teamedWinRate"]),
+                initial=entry.nickname[:1] or "?",
+                nickname=entry.nickname,
+                meta_text=f"同队 {entry.teamedGames} 场 · {entry.teamedWins}胜 {entry.teamedLosses}负{draw_part}",
+                win_rate=_pct(entry.teamedWinRate),
             )
         )
     return tuple(items)
 
 
 def _build_rivals(profile: DakanuProfile, avatar_images: Mapping[int, str]) -> tuple[RelationshipItem, ...]:
-    if "rivals" not in profile:
-        return ()
     items: list[RelationshipItem] = []
-    entries: list[DakanuRival] = profile["rivals"][:5]
+    entries: list[DakanuRival] = profile.rivals[:5]
     for entry in entries:
-        aid = entry["avatarId"]
+        aid = entry.avatarId
         avatar = avatar_images[aid] if aid in avatar_images else ""
-        draw_part = f" {entry['draws']}平" if entry["draws"] > 0 else ""
+        draw_part = f" {entry.draws}平" if entry.draws > 0 else ""
         items.append(
             RelationshipItem(
                 avatar=avatar,
-                initial=entry["nickname"][:1] or "?",
-                nickname=entry["nickname"],
-                meta_text=f"交锋 {entry['games']} 场 · {entry['wins']}胜 {entry['losses']}负{draw_part}",
-                win_rate=_pct(entry["winRate"]),
+                initial=entry.nickname[:1] or "?",
+                nickname=entry.nickname,
+                meta_text=f"交锋 {entry.games} 场 · {entry.wins}胜 {entry.losses}负{draw_part}",
+                win_rate=_pct(entry.winRate),
             )
         )
     return tuple(items)
 
 
 def _build_presence_line(presence: DakanuPresence) -> tuple[str, bool]:
-    state = presence["state"]
+    state = presence.state
     is_online = state in {"online", "busy", "invisible"}
     label = _PRESENCE_LABELS[state] if state in _PRESENCE_LABELS else state or "未知"
-    last_at = presence["lastOnlineAt"] if presence["lastOnlineAt"] is not None else presence["lastActiveAt"]
+    last_at = presence.lastOnlineAt if presence.lastOnlineAt is not None else presence.lastActiveAt
     if not is_online and last_at is not None and last_at > 0:
         return f"{label} · 上次在线 {datetime.fromtimestamp(last_at).strftime('%m-%d %H:%M')}", False
     return label, is_online
 
 
 def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> SummaryTemplateContext:
-    player = profile["player"]
-    presence = profile["presence"]
-    rank = profile["rank"]
-    summary: DakanuSummary = profile["summary"]
-    tier_label, tier_color, _ = _tier(rank["segment"])
-    season_top_seg = max(rank["topSegment"], rank["segment"])
+    player = profile.player
+    presence = profile.presence
+    rank = profile.rank
+    summary: DakanuSummary = profile.summary
+    tier_label, tier_color, _ = _tier(rank.segment)
+    season_top_seg = max(rank.topSegment, rank.segment)
     season_top_label, _, _ = _tier(season_top_seg)
-    top_label, top_color, _ = _tier(rank["historicalSegment"])
-    privacy_status = player["privacyStatus"]
+    top_label, top_color, _ = _tier(rank.historicalSegment)
+    privacy_status = player.privacyStatus
     privacy_label = _PRIVACY_LABELS[privacy_status] if privacy_status in _PRIVACY_LABELS else "隐私未知"
-    verify_label = "已认证" if player["accountVerified"] else "历史未校验"
-    previous = "、".join(player["previousNames"][:2]) or "无"
-    rank_pos = f"#{rank['rankPos']}" if rank["rankPos"] is not None else "未上榜"
-    historical_pos = str(rank["historicalSegmentPos"]) if rank["historicalSegmentPos"] is not None else "—"
-    bar_width = max(0.0, min(100.0, summary["winRate"] * 100))
-    region_label = presence["regionLabel"] if "regionLabel" in presence and presence["regionLabel"] else ""
+    verify_label = "已认证" if player.accountVerified else "历史未校验"
+    previous = "、".join(player.previousNames[:2]) or "无"
+    rank_pos = f"#{rank.rankPos}" if rank.rankPos is not None else "未上榜"
+    historical_pos = str(rank.historicalSegmentPos) if rank.historicalSegmentPos is not None else "—"
+    bar_width = max(0.0, min(100.0, summary.winRate * 100))
+    region_label = presence.regionLabel if presence.regionLabel else ""
     presence_text, presence_online = _build_presence_line(presence)
 
-    grade_score = rank["gradeScore"] if "gradeScore" in rank else 0
-    top_grade_score = rank["topGradeScore"] if "topGradeScore" in rank else 0
-    if rank["divisionScore"] > 0:
-        score_sub_text = f"{rank['divisionScore']} 段位分"
+    grade_score = rank.gradeScore
+    top_grade_score = rank.topGradeScore
+    if rank.divisionScore > 0:
+        score_sub_text = f"{rank.divisionScore} 段位分"
     elif grade_score > 0:
         score_sub_text = f"段位分 0 · 积分 {grade_score}"
     else:
         score_sub_text = "0 段位分"
-    if rank["topDivisionScore"] > 0:
-        top_score_sub_text = f"{rank['topDivisionScore']} 历史段位分"
+    if rank.topDivisionScore > 0:
+        top_score_sub_text = f"{rank.topDivisionScore} 历史段位分"
     elif top_grade_score > 0:
         top_score_sub_text = f"最高积分 {top_grade_score}"
     else:
         top_score_sub_text = "0 历史段位分"
 
-    top_roles_raw = profile["roles"][:5]
-    max_role_count = max((role["count"] for role in top_roles_raw), default=1)
+    top_roles_raw = profile.roles[:5]
+    max_role_count = max((role.count for role in top_roles_raw), default=1)
     roles = tuple(
         _build_role_item(
             role,
-            assets.role_images[role["roleId"]] if role["roleId"] in assets.role_images else "",
+            assets.role_images[role.roleId] if role.roleId in assets.role_images else "",
             max_role_count,
         )
         for role in top_roles_raw
     )
-    modes = tuple(_build_mode_item(mode) for mode in profile["modes"][:3])
-    total_damage = _num(summary["damage"]) if "damage" in summary else "—"
+    modes = tuple(_build_mode_item(mode) for mode in profile.modes[:3])
+    total_damage = _num(summary.damage)
 
     return SummaryTemplateContext(
-        nickname=player["nickname"],
-        uid=player["id"],
-        season=profile["meta"]["currentSeason"],
+        nickname=player.nickname,
+        uid=player.id,
+        season=profile.meta.currentSeason,
         is_season_view=assets.is_season_view,
         avatar=assets.avatar,
         avatar_frame=assets.avatar_frame,
@@ -1267,17 +1247,17 @@ def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> Sum
         privacy_label=privacy_label,
         verify_label=verify_label,
         clan_name=assets.clan_name,
-        level=player["level"],
-        laud=player["laud"],
+        level=player.level,
+        laud=player.laud,
         previous_names=previous,
-        like_count=rank["likeCount"],
+        like_count=rank.likeCount,
         tier_icon=assets.tier_icon,
         tier_label=tier_label,
         tier_color=tier_color,
         score_sub_text=score_sub_text,
         rank_pos=rank_pos,
         season_top_label=season_top_label,
-        historical_season=rank["historicalSegmentSeason"],
+        historical_season=rank.historicalSegmentSeason,
         top_tier_icon=assets.top_tier_icon,
         top_label=top_label,
         top_color=top_color,
@@ -1287,29 +1267,29 @@ def _build_summary_context(profile: DakanuProfile, assets: SummaryAssets) -> Sum
         baseplate=assets.baseplate,
         frame=assets.frame,
         medals=_build_medals(player, assets.medal_images),
-        rounds=summary["rounds"],
-        wins=summary["wins"],
-        losses=summary["losses"],
-        win_rate_text=_pct(summary["winRate"]),
+        rounds=summary.rounds,
+        wins=summary.wins,
+        losses=summary.losses,
+        win_rate_text=_pct(summary.winRate),
         bar_width_pct=f"{bar_width:.1f}",
-        kills=summary["kills"],
-        deaths=summary["deaths"],
-        assists=summary["assists"],
-        kd_text=f"{summary['kd']:.2f}",
-        kda_text=f"{summary['kda']:.2f}",
+        kills=summary.kills,
+        deaths=summary.deaths,
+        assists=summary.assists,
+        kd_text=f"{summary.kd:.2f}",
+        kda_text=f"{summary.kda:.2f}",
         total_damage=total_damage,
-        avg_damage=_num(summary["avgDamage"]),
-        round_avg_damage=f"{summary['roundAveDamage']:.1f}",
-        avg_kill=f"{summary['avgKill']:.2f}",
-        avg_death=f"{summary['avgDeath']:.2f}",
-        avg_assist=f"{summary['avgAssist']:.2f}",
-        headshot_rate=_pct(summary["headshotRate"]),
-        mvp_rate=_pct(summary["mvpRate"]),
-        mvp_count=summary["mvpCount"],
-        ranked_strip=_build_ranked_strip(profile["modes"]),
+        avg_damage=_num(summary.avgDamage),
+        round_avg_damage=f"{summary.roundAveDamage:.1f}",
+        avg_kill=f"{summary.avgKill:.2f}",
+        avg_death=f"{summary.avgDeath:.2f}",
+        avg_assist=f"{summary.avgAssist:.2f}",
+        headshot_rate=_pct(summary.headshotRate),
+        mvp_rate=_pct(summary.mvpRate),
+        mvp_count=summary.mvpCount,
+        ranked_strip=_build_ranked_strip(profile.modes),
         recent_form=None if assets.is_season_view else _build_recent_form(profile, assets.role_images),
         trend=None if assets.is_season_view else _build_trend(profile),
-        activity_hours=None if assets.is_season_view else _build_activity_hours(profile["matches"]),
+        activity_hours=None if assets.is_season_view else _build_activity_hours(profile.matches),
         roles=roles,
         modes=modes,
         recent_matches=() if assets.is_season_view else _build_recent_matches(assets),

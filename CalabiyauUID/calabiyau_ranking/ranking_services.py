@@ -5,36 +5,39 @@ from typing import Literal
 from pathlib import Path
 from dataclasses import dataclass
 
-from gsuid_core.pool import to_thread
 from gsuid_core.logger import logger
 
-from ..utils.api.dakanu import (
-    DakanuError,
-    DakanuRankingFloor,
-    DakanuRankingsBoard,
-    DakanuRolesRankingBoard,
-    fetch_rankings,
-    role_image_url,
-    tier_image_url,
-    avatar_image_url,
-    fetch_meta_roles,
-    fetch_ranking_floor,
-    fetch_roles_ranking,
-    fetch_current_season,
-    challenge_tier_image_url,
-)
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import resolve_role_name, resolve_role_alias, get_role_display_names
 from ..utils.utils.cache import AsyncTtlCache
 from ..utils.helper.assets import (
-    image_data_uri,
     local_role_image,
     local_tier_image,
     local_avatar_image,
+    read_image_data_uri,
     local_challenge_tier_image,
 )
 from ..utils.helper.season import ResolvedSeason, resolve_season_query, split_season_and_target
 from ..utils.helper.ai_bridge import emit_ai_text
+from ..utils.api.dakanu.assets import (
+    role_image_url,
+    tier_image_url,
+    avatar_image_url,
+    challenge_tier_image_url,
+)
+from ..utils.api.dakanu.client import DakanuError
+from ..utils.api.dakanu.requests import (
+    fetch_rankings,
+    fetch_meta_roles,
+    fetch_ranking_floor,
+    fetch_roles_ranking,
+    fetch_current_season,
+)
+from ..utils.api.dakanu.models.ranking import (
+    DakanuRankingFloor,
+    DakanuRankingsBoard,
+    DakanuRolesRankingBoard,
+)
 from ..utils.render.html.renderer.ranking_card import RankingCardAssets, render_ranking_card
 from ..utils.render.html.renderer.summary_card import (
     tier_index,
@@ -68,24 +71,15 @@ _roles_card_cache: AsyncTtlCache[tuple[RolesSortBy, bool], _RankingCardCache] = 
 )
 
 
-def _read_existing_image_uri(path: Path) -> str:
-    if not path.is_file() or path.stat().st_size <= 0:
-        return ""
-    return image_data_uri(path.read_bytes(), path.suffix)
-
-
 async def _resolve_ranking_image_uri(url: str, local_path: Path | None, semaphore: asyncio.Semaphore) -> str:
-    if local_path is not None:
-        cached_uri = await to_thread(_read_existing_image_uri)(local_path)
-        if cached_uri:
-            return cached_uri
+    cached_uri = await read_image_data_uri(local_path)
+    if cached_uri:
+        return cached_uri
     if not url:
         return ""
     async with semaphore:
         path = await resolve_image(url, local_path)
-    if path is None:
-        return ""
-    return await to_thread(_read_existing_image_uri)(path)
+    return await read_image_data_uri(path)
 
 
 async def _load_avatar_images(avatar_ids: set[int], semaphore: asyncio.Semaphore) -> dict[int, str]:
@@ -146,11 +140,11 @@ async def _build_assets(board: DakanuRankingsBoard, tier_mode: TierMode) -> Rank
     avatar_ids: set[int] = set()
     role_ids: set[int] = set()
     tier_indices: set[int] = set()
-    for entry in board["entries"]:
-        avatar_ids.add(entry["avatarId"])
-        for role_id in entry["roles"][:3]:
+    for entry in board.entries:
+        avatar_ids.add(entry.avatarId)
+        for role_id in entry.roles[:3]:
             role_ids.add(role_id)
-        segment = entry["segment"]
+        segment = entry.segment
         if segment is not None and tier_mode != "none":
             idx = challenge_tier_index(segment) if tier_mode == "challenge" else tier_index(segment)
             if idx > 0:
@@ -226,8 +220,7 @@ async def _fetch_ranking_bundle(
             floor = None
         season_label = season.label
         if season_id > 0:
-            season_applied = board["seasonApplied"] if "seasonApplied" in board else None
-            if season_applied is False or not board["entries"]:
+            if board.seasonApplied is False or not board.entries:
                 raise DakanuError(f"{season_label} 暂未收录该榜单数据。")
         return board, floor, season_label
 
@@ -243,7 +236,7 @@ async def _fetch_ranking_bundle(
             fetch_current_season(),
         )
         floor = None
-    season_label = current_season["ranked_season"]["label"] if current_season is not None else ""
+    season_label = current_season.ranked_season.label if current_season is not None else ""
     return board, floor, season_label
 
 
@@ -296,26 +289,25 @@ def _format_board_ranking_ai_summary(
     tier_mode: TierMode,
     title_override: str | None,
 ) -> str:
-    title = title_override or board["rankType"]["label"]
-    header = f"【{title}（{season_label or board['day']}，共 {board['total']} 人上榜，{board['metricLabel']}）】"
+    title = title_override or board.rankType.label
+    header = f"【{title}（{season_label or board.day}，共 {board.total} 人上榜，{board.metricLabel}）】"
     lines: list[str] = [header]
     if floor is not None:
-        current = floor["current"]
-        lines.append(f"上榜门槛：第 {current['position']} 名 {current['score']} 分（统计日 {current['day']}）")
-    for entry in board["entries"][:10]:
+        current = floor.current
+        lines.append(f"上榜门槛：第 {current.position} 名 {current.score} 分（统计日 {current.day}）")
+    for entry in board.entries[:10]:
         tier_text = ""
-        if entry["segment"] is not None:
+        if entry.segment is not None:
             if tier_mode == "ranked":
-                tier_text = f" [{tier_display(entry['segment'])[0]}]"
+                tier_text = f" [{tier_display(entry.segment)[0]}]"
             elif tier_mode == "challenge":
-                label = challenge_tier_display(entry["segment"])[0]
+                label = challenge_tier_display(entry.segment)[0]
                 if label:
                     tier_text = f" [{label}]"
-        roles_text = "/".join(resolve_role_name(rid) or str(rid) for rid in entry["roles"][:3])
+        roles_text = "/".join(resolve_role_name(rid) or str(rid) for rid in entry.roles[:3])
         role_suffix = f" 常用:{roles_text}" if roles_text else ""
         lines.append(
-            f"#{entry['position']} {entry['nickname']}（UID:{entry['playerId']}）{tier_text} "
-            f"{entry['score']}分{role_suffix}"
+            f"#{entry.position} {entry.nickname}（UID:{entry.playerId}）{tier_text} {entry.score}分{role_suffix}"
         )
     return "\n".join(lines)
 
@@ -329,24 +321,24 @@ def _format_roles_ranking_ai_summary(
     scope = "仅排位" if ranked_only else "全模式"
     metric = "胜率" if sort_by == "winRate" else "出场率"
     ordered = sorted(
-        board["entries"],
-        key=lambda item: (item["winRate"] if sort_by == "winRate" else item["appearanceRate"], item["games"]),
+        board.entries,
+        key=lambda item: (item.winRate if sort_by == "winRate" else item.appearanceRate, item.games),
         reverse=True,
     )
-    lines: list[str] = [f"【超弦体{metric}排行（{scope}，统计日 {board['day']}，覆盖 {board['coveredMatches']} 场）】"]
+    lines: list[str] = [f"【超弦体{metric}排行（{scope}，统计日 {board.day}，覆盖 {board.coveredMatches} 场）】"]
     lines.append("Top 5：")
     for idx, entry in enumerate(ordered[:5], start=1):
-        name = role_names[entry["roleId"]] if entry["roleId"] in role_names else str(entry["roleId"])
+        name = role_names[entry.roleId] if entry.roleId in role_names else str(entry.roleId)
         lines.append(
-            f"{idx}. {name}：胜率 {entry['winRate'] * 100:.1f}% | 出场率 {entry['appearanceRate'] * 100:.1f}% | 场次 {entry['games']}"
+            f"{idx}. {name}：胜率 {entry.winRate * 100:.1f}% | 出场率 {entry.appearanceRate * 100:.1f}% | 场次 {entry.games}"
         )
     if len(ordered) > 5:
         lines.append("后 5 名：")
         start_pos = max(6, len(ordered) - 4)
         for offset, entry in enumerate(ordered[-5:]):
-            name = role_names[entry["roleId"]] if entry["roleId"] in role_names else str(entry["roleId"])
+            name = role_names[entry.roleId] if entry.roleId in role_names else str(entry.roleId)
             lines.append(
-                f"{start_pos + offset}. {name}：胜率 {entry['winRate'] * 100:.1f}% | 出场率 {entry['appearanceRate'] * 100:.1f}% | 场次 {entry['games']}"
+                f"{start_pos + offset}. {name}：胜率 {entry.winRate * 100:.1f}% | 出场率 {entry.appearanceRate * 100:.1f}% | 场次 {entry.games}"
             )
     return "\n".join(lines)
 
@@ -406,7 +398,7 @@ async def build_roles_ranking_card(
         )
         role_names = {**remote_roles, **get_role_display_names()}
         summary = _format_roles_ranking_ai_summary(board, role_names, sort_by, ranked_only)
-        role_ids = {entry["roleId"] for entry in board["entries"]}
+        role_ids = {entry.roleId for entry in board.entries}
         role_images = await _load_role_images(
             role_ids,
             asyncio.Semaphore(_DOWNLOAD_CONCURRENCY),

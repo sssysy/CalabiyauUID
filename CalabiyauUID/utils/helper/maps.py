@@ -1,12 +1,12 @@
 """从 resources/maps.json 组装地图与角色基础 ID 映射关系。"""
 
-import json
 import itertools
 from pathlib import Path
 from functools import lru_cache
 from dataclasses import dataclass
 from collections.abc import Mapping, Callable
 
+from pydantic import Field, BaseModel, ConfigDict, ValidationError
 from pypinyin import Style, pinyin, lazy_pinyin
 
 from gsuid_core.logger import logger
@@ -17,8 +17,9 @@ MAPS_JSON_PATH: Path = RESOURCE_DIR / "maps.json"
 _LOG_TAG = "[卡拉彼丘·地图角色配置]"
 
 
-@dataclass(frozen=True)
-class MapInfo:
+class MapInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore", frozen=True)
+
     slug: str
     name: str
     mode: str
@@ -33,6 +34,34 @@ class RoleMeta:
     faction_text_color: str
     position_code: int
     position_name: str
+
+
+class _RoleFactionRaw(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    name: str
+    dot_color: str
+    text_color: str
+
+
+class _RoleMetaCodeRaw(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    faction_code: int
+    position_code: int
+
+
+class _MapsPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    maps: list[MapInfo] = Field(default_factory=list)
+    explicit_map_slugs: dict[int, str] = Field(default_factory=dict)
+    explicit_map_names: dict[int, str] = Field(default_factory=dict)
+    mode_names: dict[int, str] = Field(default_factory=dict)
+    role_names: dict[int, list[str]] = Field(default_factory=dict)
+    role_factions: dict[int, _RoleFactionRaw] = Field(default_factory=dict)
+    role_positions: dict[int, str] = Field(default_factory=dict)
+    role_meta_codes: dict[int, _RoleMetaCodeRaw] = Field(default_factory=dict)
 
 
 _MAPS: list[MapInfo] = []
@@ -51,103 +80,6 @@ _loaded_path: Path | None = None
 _loaded_mtime_ns: int | None = None
 
 
-def _parse_int_key(raw_key: str) -> int | None:
-    cleaned = raw_key.strip()
-    if not cleaned.isascii() or not cleaned.isdigit():
-        return None
-    return int(cleaned)
-
-
-def _parse_int_str_map(raw: object) -> dict[int, str]:
-    if not isinstance(raw, dict):
-        return {}
-    result: dict[int, str] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not isinstance(value, str):
-            continue
-        parsed_key = _parse_int_key(key)
-        if parsed_key is not None and value:
-            result[parsed_key] = value
-    return result
-
-
-def _parse_maps_list(raw: object) -> list[MapInfo]:
-    if not isinstance(raw, list):
-        return []
-    result: list[MapInfo] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        if "slug" not in item or "name" not in item or "mode" not in item:
-            continue
-        slug = item["slug"]
-        name = item["name"]
-        mode = item["mode"]
-        if isinstance(slug, str) and isinstance(name, str) and isinstance(mode, str):
-            result.append(MapInfo(slug=slug, name=name, mode=mode))
-    return result
-
-
-def _parse_role_names(raw: object) -> dict[int, list[str]]:
-    if not isinstance(raw, dict):
-        return {}
-    result: dict[int, list[str]] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not isinstance(value, list):
-            continue
-        parsed_key = _parse_int_key(key)
-        if parsed_key is None:
-            continue
-        names = [item for item in value if isinstance(item, str) and item.strip()]
-        if names:
-            result[parsed_key] = names
-    return result
-
-
-def _parse_role_factions(raw: object) -> dict[int, tuple[str, str, str]]:
-    if not isinstance(raw, dict):
-        return {}
-    result: dict[int, tuple[str, str, str]] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not isinstance(value, dict):
-            continue
-        parsed_key = _parse_int_key(key)
-        if parsed_key is None:
-            continue
-        if "name" not in value or "dot_color" not in value or "text_color" not in value:
-            continue
-        name = value["name"]
-        dot_color = value["dot_color"]
-        text_color = value["text_color"]
-        if isinstance(name, str) and isinstance(dot_color, str) and isinstance(text_color, str):
-            result[parsed_key] = (name, dot_color, text_color)
-    return result
-
-
-def _parse_role_meta_codes(raw: object) -> dict[int, tuple[int, int]]:
-    if not isinstance(raw, dict):
-        return {}
-    result: dict[int, tuple[int, int]] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not isinstance(value, dict):
-            continue
-        parsed_key = _parse_int_key(key)
-        if parsed_key is None:
-            continue
-        if "faction_code" not in value or "position_code" not in value:
-            continue
-        faction_code = value["faction_code"]
-        position_code = value["position_code"]
-        if (
-            isinstance(faction_code, int)
-            and not isinstance(faction_code, bool)
-            and isinstance(position_code, int)
-            and not isinstance(position_code, bool)
-        ):
-            result[parsed_key] = (faction_code, position_code)
-    return result
-
-
 def reload_maps_data(path: Path | None = None) -> bool:
     """从 resources/maps.json 重新装载并组装全部地图与角色配置表。"""
     global _loaded_path, _loaded_mtime_ns
@@ -157,24 +89,27 @@ def reload_maps_data(path: Path | None = None) -> bool:
         return False
     try:
         stat_result = target.stat()
-        raw_text = target.read_text(encoding="utf-8")
-        payload: object = json.loads(raw_text)
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = _MapsPayload.model_validate_json(target.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
         logger.warning(f"{_LOG_TAG} 读取 {target.name} 失败：{exc}")
         return False
 
-    if not isinstance(payload, dict):
-        logger.warning(f"{_LOG_TAG} {target.name} 顶层结构不是对象")
-        return False
-
-    maps_list = _parse_maps_list(payload["maps"] if "maps" in payload else None)
-    explicit_slugs = _parse_int_str_map(payload["explicit_map_slugs"] if "explicit_map_slugs" in payload else None)
-    explicit_names = _parse_int_str_map(payload["explicit_map_names"] if "explicit_map_names" in payload else None)
-    mode_names = _parse_int_str_map(payload["mode_names"] if "mode_names" in payload else None)
-    role_names = _parse_role_names(payload["role_names"] if "role_names" in payload else None)
-    role_factions = _parse_role_factions(payload["role_factions"] if "role_factions" in payload else None)
-    role_positions = _parse_int_str_map(payload["role_positions"] if "role_positions" in payload else None)
-    role_meta_codes = _parse_role_meta_codes(payload["role_meta_codes"] if "role_meta_codes" in payload else None)
+    maps_list = payload.maps
+    explicit_slugs = {map_id: slug for map_id, slug in payload.explicit_map_slugs.items() if slug}
+    explicit_names = {map_id: name for map_id, name in payload.explicit_map_names.items() if name}
+    mode_names = {mode_code: mode_name for mode_code, mode_name in payload.mode_names.items() if mode_name}
+    role_names = {
+        role_id: cleaned
+        for role_id, names in payload.role_names.items()
+        if (cleaned := [name for name in names if name.strip()])
+    }
+    role_factions = {
+        code: (faction.name, faction.dot_color, faction.text_color) for code, faction in payload.role_factions.items()
+    }
+    role_positions = {code: pos_name for code, pos_name in payload.role_positions.items() if pos_name}
+    role_meta_codes = {
+        role_id: (meta.faction_code, meta.position_code) for role_id, meta in payload.role_meta_codes.items()
+    }
 
     _MAPS.clear()
     _MAPS.extend(maps_list)

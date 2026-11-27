@@ -2,8 +2,8 @@
 
 import time
 
-from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import refresh_player_data
+from ..utils.api.dakanu.client import DakanuError
 from ..utils.helper.player_data import load_player_snapshot
 from ..utils.database.model_bind import CalabiyauBind
 from ..utils.helper.player_resolve import is_numeric_uid, resolve_player_input
@@ -18,7 +18,7 @@ async def bind_account(
     result = await refresh_player_data(game_uid)
     added = await CalabiyauBind.add_bind(bot_id, user_id, game_uid)
     source = "本地快照" if result.from_cache else "最新战绩"
-    nickname = result.snapshot.profile["player"]["nickname"]
+    nickname = result.snapshot.profile.player.nickname
     account = f"[{game_uid}] {nickname}"
     if not added:
         return f"该账号已绑定：{account}\n{source}已准备就绪。"
@@ -44,7 +44,7 @@ async def _format_bound_account(game_uid: str) -> str:
     snapshot = await load_player_snapshot(game_uid)
     if snapshot is None:
         return f"[{game_uid}]"
-    nickname = snapshot.profile["player"]["nickname"]
+    nickname = snapshot.profile.player.nickname
     return f"[{game_uid}] {nickname}"
 
 
@@ -65,7 +65,7 @@ async def _resolve_bound_uid(
     local_matches: list[str] = []
     for bind in binds:
         snapshot = await load_player_snapshot(bind.game_uid)
-        if snapshot is not None and snapshot.profile["player"]["nickname"] == cleaned:
+        if snapshot is not None and snapshot.profile.player.nickname == cleaned:
             local_matches.append(bind.game_uid)
     if len(local_matches) == 1:
         return local_matches[0], None

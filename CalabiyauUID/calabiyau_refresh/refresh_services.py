@@ -6,8 +6,8 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 
-from ..utils.api.dakanu import DakanuError
 from ..utils.helper.refresh import refresh_player_data
+from ..utils.api.dakanu.client import DakanuError
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.player_resolve import resolve_player_input
 

@@ -8,8 +8,8 @@ from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 
 from .bind_services import bind_account, view_accounts, switch_account, unbind_account_by_query
-from ..utils.api.dakanu import DakanuError
 from ..utils.utils.background import track_background_task
+from ..utils.api.dakanu.client import DakanuError
 from ..utils.helper.player_resolve import resolve_player_input
 
 sv_bind = SV("卡拉彼丘账号绑定")

@@ -1,9 +1,11 @@
 """Biligame 卡拉彼丘 Wiki 活动公开读取接口。"""
 
+from typing import Any, Annotated
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
 
 import httpx
+from pydantic import Field, AliasPath, BaseModel, ConfigDict, BeforeValidator, ValidationError
 
 from gsuid_core.logger import logger
 
@@ -65,163 +67,144 @@ class WikiRedeemCodeItem:
     is_permanent: bool
 
 
+class _WikiModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
 def beijing_now() -> datetime:
     """返回当前北京时间（UTC+8）。"""
     return datetime.now(_BEIJING_TZ)
 
 
-def parse_smw_beijing_time(item: object) -> datetime | None:
+def parse_smw_beijing_time(item: Any) -> datetime | None:
     """解析 SMW 日期对象；Wiki 把北京时间按 UTC 纪元存储，不可额外加 8 小时。"""
     if not isinstance(item, dict):
         return None
-    if "timestamp" in item:
-        raw_ts = item["timestamp"]
-        if isinstance(raw_ts, int) and not isinstance(raw_ts, bool):
-            return datetime.fromtimestamp(raw_ts, timezone.utc).replace(tzinfo=_BEIJING_TZ)
-        if isinstance(raw_ts, str):
-            stripped = raw_ts.strip()
-            if stripped.lstrip("-").isdigit():
-                return datetime.fromtimestamp(int(stripped), timezone.utc).replace(tzinfo=_BEIJING_TZ)
-    if "raw" in item and isinstance(item["raw"], str):
-        parts = item["raw"].split("/")
+    raw_ts = item.get("timestamp")
+    if isinstance(raw_ts, int) and not isinstance(raw_ts, bool):
+        return datetime.fromtimestamp(raw_ts, timezone.utc).replace(tzinfo=_BEIJING_TZ)
+    if isinstance(raw_ts, str):
+        stripped = raw_ts.strip()
+        if stripped.lstrip("-").isdigit():
+            return datetime.fromtimestamp(int(stripped), timezone.utc).replace(tzinfo=_BEIJING_TZ)
+    raw_val = item.get("raw")
+    if isinstance(raw_val, str):
+        parts = raw_val.split("/")
         if len(parts) >= 7 and all(part.isdigit() for part in parts[1:7]):
             year, month, day, hour, minute, second = (int(part) for part in parts[1:7])
             return datetime(year, month, day, hour, minute, second, tzinfo=_BEIJING_TZ)
     return None
 
 
-def _first_nonempty_str(printouts: dict[object, object], key: str) -> str | None:
-    if key not in printouts:
-        return None
-    values = printouts[key]
-    if not isinstance(values, list) or not values:
-        return None
-    first = values[0]
-    if not isinstance(first, str):
-        return None
-    cleaned = first.strip()
-    return cleaned if cleaned else None
+def _clean_str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
-def _first_time(printouts: dict[object, object], key: str) -> datetime | None:
-    if key not in printouts:
-        return None
-    values = printouts[key]
-    if not isinstance(values, list) or not values:
-        return None
-    return parse_smw_beijing_time(values[0])
+_CleanStr = Annotated[str, BeforeValidator(_clean_str)]
+_SmwDatetime = Annotated[datetime | None, BeforeValidator(parse_smw_beijing_time)]
 
 
-def _extract_ask_results(payload: object) -> dict[object, object]:
-    if not isinstance(payload, dict) or "query" not in payload:
-        return {}
-    query_obj = payload["query"]
-    if not isinstance(query_obj, dict) or "results" not in query_obj:
-        return {}
-    results = query_obj["results"]
-    return results if isinstance(results, dict) else {}
+class _WikiQuery(_WikiModel):
+    results: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasPath("query", "results"))
+    pages: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasPath("query", "pages"))
 
 
-def parse_ask_activities(payload: object) -> list[WikiRawActivity]:
+class _ActivityEntry(_WikiModel):
+    title: _CleanStr = Field(default="", validation_alias=AliasPath("printouts", "活动名", 0))
+    image_name: _CleanStr = Field(default="", validation_alias=AliasPath("printouts", "活动图片", 0))
+    start_at: _SmwDatetime = Field(default=None, validation_alias=AliasPath("printouts", "活动开始时间", 0))
+    end_at: _SmwDatetime = Field(default=None, validation_alias=AliasPath("printouts", "活动结束时间", 0))
+    summary: _CleanStr = Field(default="", validation_alias=AliasPath("printouts", "活动简介", 0))
+    fulltext: _CleanStr = ""
+    fullurl: _CleanStr = ""
+
+
+class _RedeemEntry(_WikiModel):
+    code: _CleanStr = Field(default="", validation_alias=AliasPath("printouts", "兑换码", 0))
+    rewards: _CleanStr = Field(default="", validation_alias=AliasPath("printouts", "奖励内容", 0))
+    expires_at: _SmwDatetime = Field(default=None, validation_alias=AliasPath("printouts", "兑换码失效时间", 0))
+
+
+class _ImageInfoPage(_WikiModel):
+    title: _CleanStr = ""
+    url: _CleanStr = Field(default="", validation_alias=AliasPath("imageinfo", 0, "url"))
+
+
+def parse_ask_activities(payload: Any) -> list[WikiRawActivity]:
     """解析 SMW action=ask 返回的活动列表。"""
-    results = _extract_ask_results(payload)
-    if not results:
+    try:
+        results = _WikiQuery.model_validate(payload).results
+    except ValidationError:
         return []
 
     items: list[WikiRawActivity] = []
-    for page_key, entry in results.items():
-        if not isinstance(entry, dict) or "printouts" not in entry:
+    for page_key, raw_entry in results.items():
+        try:
+            entry = _ActivityEntry.model_validate(raw_entry)
+        except ValidationError:
             continue
-        printouts = entry["printouts"]
-        if not isinstance(printouts, dict):
+        if entry.start_at is None or entry.end_at is None:
             continue
-        start_at = _first_time(printouts, "活动开始时间")
-        end_at = _first_time(printouts, "活动结束时间")
-        if start_at is None or end_at is None:
+        title = entry.title or entry.fulltext or page_key.strip()
+        if not title:
             continue
-
-        title = _first_nonempty_str(printouts, "活动名")
-        if title is None:
-            if "fulltext" in entry and isinstance(entry["fulltext"], str) and entry["fulltext"].strip():
-                title = entry["fulltext"].strip()
-            elif isinstance(page_key, str) and page_key.strip():
-                title = page_key.strip()
-            else:
-                continue
-
-        image_name = _first_nonempty_str(printouts, "活动图片") or ""
-        summary = _first_nonempty_str(printouts, "活动简介") or ""
-        page_url = entry["fullurl"].strip() if "fullurl" in entry and isinstance(entry["fullurl"], str) else ""
         items.append(
             WikiRawActivity(
                 title=title,
-                image_name=image_name,
-                start_at=start_at,
-                end_at=end_at,
-                summary=summary,
-                page_url=page_url,
+                image_name=entry.image_name,
+                start_at=entry.start_at,
+                end_at=entry.end_at,
+                summary=entry.summary,
+                page_url=entry.fullurl,
             )
         )
     return items
 
 
-def parse_ask_redeem_codes(payload: object) -> list[WikiRedeemCodeItem]:
+def parse_ask_redeem_codes(payload: Any) -> list[WikiRedeemCodeItem]:
     """解析 SMW action=ask 返回的兑换码列表。"""
-    results = _extract_ask_results(payload)
-    if not results:
+    try:
+        results = _WikiQuery.model_validate(payload).results
+    except ValidationError:
         return []
 
     items: list[WikiRedeemCodeItem] = []
-    for entry in results.values():
-        if not isinstance(entry, dict) or "printouts" not in entry:
+    for raw_entry in results.values():
+        try:
+            entry = _RedeemEntry.model_validate(raw_entry)
+        except ValidationError:
             continue
-        printouts = entry["printouts"]
-        if not isinstance(printouts, dict):
+        if not entry.code or entry.expires_at is None:
             continue
-        code = _first_nonempty_str(printouts, "兑换码")
-        expires_at = _first_time(printouts, "兑换码失效时间")
-        if code is None or expires_at is None:
-            continue
-        rewards = _first_nonempty_str(printouts, "奖励内容") or ""
         items.append(
             WikiRedeemCodeItem(
-                code=code,
-                rewards=rewards,
-                expires_at=expires_at,
-                is_permanent=expires_at.year >= 2099,
+                code=entry.code,
+                rewards=entry.rewards,
+                expires_at=entry.expires_at,
+                is_permanent=entry.expires_at.year >= 2099,
             )
         )
     return items
 
 
-def parse_imageinfo_urls(payload: object) -> dict[str, str]:
+def parse_imageinfo_urls(payload: Any) -> dict[str, str]:
     """解析 MediaWiki imageinfo 返回的 文件名 -> CDN 直链映射。"""
-    if not isinstance(payload, dict) or "query" not in payload:
-        return {}
-    query_obj = payload["query"]
-    if not isinstance(query_obj, dict) or "pages" not in query_obj:
-        return {}
-    pages = query_obj["pages"]
-    if not isinstance(pages, dict):
+    try:
+        pages = _WikiQuery.model_validate(payload).pages
+    except ValidationError:
         return {}
 
     urls: dict[str, str] = {}
-    for page in pages.values():
-        if not isinstance(page, dict) or "title" not in page or "imageinfo" not in page:
+    for raw_page in pages.values():
+        try:
+            page = _ImageInfoPage.model_validate(raw_page)
+        except ValidationError:
             continue
-        raw_title = page["title"]
-        info_list = page["imageinfo"]
-        if not isinstance(raw_title, str) or not isinstance(info_list, list) or not info_list:
+        if not page.title or not page.url:
             continue
-        first_info = info_list[0]
-        if not isinstance(first_info, dict) or "url" not in first_info:
-            continue
-        raw_url = first_info["url"]
-        if not isinstance(raw_url, str) or not raw_url.strip():
-            continue
-        file_name = raw_title.split(":", 1)[-1].strip()
+        file_name = page.title.split(":", 1)[-1].strip()
         if file_name:
-            urls[file_name] = raw_url.strip()
+            urls[file_name] = page.url
     return urls
 
 
@@ -231,7 +214,7 @@ async def _request_wiki_json(
     *,
     log_tag: str = _LOG_TAG,
     subject: str = "Wiki 活动数据",
-) -> object:
+) -> Any:
     try:
         response = await client.get(_WIKI_API_URL, params=params)
     except httpx.HTTPError as exc:
@@ -305,7 +288,7 @@ async def fetch_ongoing_activities(now: datetime | None = None) -> list[WikiActi
         WikiActivityItem(
             title=item.title,
             image_name=item.image_name,
-            image_url=image_urls[item.image_name] if item.image_name in image_urls else "",
+            image_url=image_urls.get(item.image_name, ""),
             start_at=item.start_at,
             end_at=item.end_at,
             summary=item.summary,

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
 from .summary_card import tier_display, challenge_tier_display
-from ....api.dakanu import DakanuRankingEntry, DakanuRankingFloor, DakanuRankingsBoard
+from ....api.dakanu.models.ranking import DakanuRankingEntry, DakanuRankingFloor, DakanuRankingsBoard
 
 
 @dataclass(frozen=True)
@@ -105,8 +105,8 @@ def _delta_parts(score_delta: int | None) -> tuple[str, str]:
 def _build_floor_item(floor: DakanuRankingFloor | None) -> FloorPillItem | None:
     if floor is None:
         return None
-    score = f"{floor['current']['score']:,}"
-    delta = floor["yesterdayDelta"]
+    score = f"{floor.current.score:,}"
+    delta = floor.yesterdayDelta
     if delta is None:
         return FloorPillItem(score=score, delta_text="", delta_class="")
     if delta > 0:
@@ -136,37 +136,37 @@ def _resolve_tier(segment: int | None, tier_mode: str, assets: RankingCardAssets
 
 
 def _build_podium_item(entry: DakanuRankingEntry, assets: RankingCardAssets, tier_mode: str) -> PodiumCardItem:
-    position = entry["position"]
+    position = entry.position
     rank_class = f"podium-pos-{position}" if position in {1, 2, 3} else "podium-pos-other"
-    tier_label, tier_color, tier_uri = _resolve_tier(entry["segment"], tier_mode, assets)
-    region = entry["region"].strip() if entry["region"] is not None else ""
-    meta_text = f"等级 {entry['level']} · {region}" if region else f"等级 {entry['level']}"
-    score_text = f"{entry['score']:,}"
+    tier_label, tier_color, tier_uri = _resolve_tier(entry.segment, tier_mode, assets)
+    region = entry.region.strip() if entry.region is not None else ""
+    meta_text = f"等级 {entry.level} · {region}" if region else f"等级 {entry.level}"
+    score_text = f"{entry.score:,}"
     return PodiumCardItem(
         position=position,
         rank_class=rank_class,
         is_first=position == 1,
-        avatar=_lookup_image(assets.avatar_images, entry["avatarId"]),
-        initial=entry["nickname"][0] if entry["nickname"] else "?",
-        nickname=entry["nickname"],
+        avatar=_lookup_image(assets.avatar_images, entry.avatarId),
+        initial=entry.nickname[0] if entry.nickname else "?",
+        nickname=entry.nickname,
         tier_uri=tier_uri,
         tier_label=tier_label,
         tier_color=tier_color,
         meta_text=meta_text,
         score=score_text,
         is_long_score=len(score_text) > 10,
-        roles=_role_uris(entry["roles"], assets),
+        roles=_role_uris(entry.roles, assets),
     )
 
 
 def _build_row_item(entry: DakanuRankingEntry, assets: RankingCardAssets, tier_mode: str) -> RankingRowItem:
-    tier_label, tier_color, tier_uri = _resolve_tier(entry["segment"], tier_mode, assets)
-    region = entry["region"].strip() if entry["region"] is not None else ""
+    tier_label, tier_color, tier_uri = _resolve_tier(entry.segment, tier_mode, assets)
+    region = entry.region.strip() if entry.region is not None else ""
     region_text = region if region else "—"
-    delta_text, delta_class = _delta_parts(entry["scoreDelta"])
+    delta_text, delta_class = _delta_parts(entry.scoreDelta)
 
-    raw_wins = entry["wins"]
-    raw_total_games = entry["totalGames"]
+    raw_wins = entry.wins
+    raw_total_games = entry.totalGames
     wins = max(0, raw_wins) if raw_wins is not None else 0
     has_record_bar = raw_total_games is not None
     total_games = max(0, raw_total_games) if raw_total_games is not None else 0
@@ -189,19 +189,19 @@ def _build_row_item(entry: DakanuRankingEntry, assets: RankingCardAssets, tier_m
     wins_only_text = f"{wins:,} 胜" if raw_wins is not None else "—"
 
     return RankingRowItem(
-        position=entry["position"],
-        avatar=_lookup_image(assets.avatar_images, entry["avatarId"]),
-        initial=entry["nickname"][0] if entry["nickname"] else "?",
-        nickname=entry["nickname"],
-        player_id=entry["playerId"],
+        position=entry.position,
+        avatar=_lookup_image(assets.avatar_images, entry.avatarId),
+        initial=entry.nickname[0] if entry.nickname else "?",
+        nickname=entry.nickname,
+        player_id=entry.playerId,
         region_text=region_text,
         tier_uri=tier_uri,
         tier_label=tier_label if tier_label else "—",
         tier_color=tier_color,
-        score=f"{entry['score']:,}",
+        score=f"{entry.score:,}",
         delta_text=delta_text,
         delta_class=delta_class,
-        roles=_role_uris(entry["roles"], assets),
+        roles=_role_uris(entry.roles, assets),
         has_record_bar=has_record_bar,
         has_games=has_games,
         wins=wins,
@@ -223,10 +223,10 @@ def _build_ranking_context(
     title_override: str | None = None,
     is_historical_season: bool = False,
 ) -> RankingTemplateContext:
-    entries = board["entries"]
-    title = title_override if title_override else (board["rankType"]["label"] or "排行榜")
-    metric_label = board["metricLabel"] or "分数"
-    has_total_games = any(entry["totalGames"] is not None for entry in entries)
+    entries = board.entries
+    title = title_override if title_override else (board.rankType.label or "排行榜")
+    metric_label = board.metricLabel or "分数"
+    has_total_games = any(entry.totalGames is not None for entry in entries)
     record_header = "胜率" if has_total_games or not entries else "胜场"
     show_tier = tier_mode != "none"
     podium_entries = _podium_order(entries[:3])

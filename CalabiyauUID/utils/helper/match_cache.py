@@ -3,25 +3,19 @@
 import re
 import json
 import time
-from typing import TypedDict
 from pathlib import Path
 
 from gsuid_core.pool import to_thread
 from gsuid_core.logger import logger
 
-from ..api.dakanu import (
-    DakanuMatchTeam,
-    DakanuMatchDetail,
-    DakanuMatchPlayer,
-    DakanuMatchStatistics,
-    is_valid_room_id,
-    fetch_match_detail,
-    parse_match_statistics,
-    is_match_detail_response,
-    fetch_match_statistics_payload,
-)
 from ..utils.cache import AsyncTtlCache, touch_cache_mtime
 from ..utils.paths import MATCH_STATS_CACHE_DIR, MATCH_DETAIL_CACHE_DIR
+from ..api.dakanu.requests import fetch_match_detail, fetch_match_statistics_payload
+from ..api.dakanu.models.match import DakanuMatchTeam, DakanuMatchDetail, DakanuMatchPlayer, is_valid_room_id
+from ..api.dakanu.models.match_stats import (
+    DakanuMatchStatistics,
+    parse_match_statistics,
+)
 
 _DETAIL_MEMORY_MAXSIZE = 256
 _STATS_MEMORY_MAXSIZE = 64
@@ -29,11 +23,6 @@ _STATS_MEMORY_MAXSIZE = 64
 _RANK_BOMB_RE = re.compile(r"(?:^|[_\s])RANK_BOMB(?:$|[_\s])", re.IGNORECASE)
 _CAMP_ID_RE = re.compile(r"^RoomCamp_CAMP_\d+$")
 _REGION_RE = re.compile(r"^[a-z0-9_-]{1,16}$")
-
-
-class _MatchDetailDiskRecord(TypedDict):
-    saved_at: int
-    detail: DakanuMatchDetail
 
 
 _detail_cache: AsyncTtlCache[str, DakanuMatchDetail | None] = AsyncTtlCache(maxsize=_DETAIL_MEMORY_MAXSIZE)
@@ -60,48 +49,10 @@ def match_stats_cache_path(room_id: str, region: str) -> Path:
     return MATCH_STATS_CACHE_DIR / f"{cleaned_region}_{room_id}.json"
 
 
-def _is_valid_match_player(value: object) -> bool:
-    if not isinstance(value, dict):
-        return False
-    required_str = ("playerId", "nickname", "teamId", "teamLabel", "roleName", "result")
-    required_int = ("avatarId", "roleId", "kills", "assists", "deaths", "damage", "score")
-    required_bool = ("mvp", "svp", "isTarget")
-    for key in required_str:
-        if key not in value or not isinstance(value[key], str):
-            return False
-    for key in required_int:
-        if key not in value or not isinstance(value[key], int) or isinstance(value[key], bool):
-            return False
-    for key in required_bool:
-        if key not in value or not isinstance(value[key], bool):
-            return False
-    return True
-
-
-def _is_valid_match_teams(teams: object) -> bool:
-    if not isinstance(teams, list) or not teams:
-        return False
-    has_players = False
-    for team in teams:
-        if not isinstance(team, dict):
-            return False
-        if "id" not in team or not isinstance(team["id"], str):
-            return False
-        if "label" not in team or not isinstance(team["label"], str):
-            return False
-        if "players" not in team or not isinstance(team["players"], list):
-            return False
-        for player in team["players"]:
-            if not _is_valid_match_player(player):
-                return False
-            has_players = True
-    return has_players
-
-
 def _is_rank_bomb_mode(detail: DakanuMatchDetail, match_mode: str | None) -> bool:
     mode_text = match_mode
-    if not mode_text and "matchMode" in detail and isinstance(detail["matchMode"], str):
-        mode_text = detail["matchMode"]
+    if not mode_text and detail.matchMode:
+        mode_text = detail.matchMode
     return bool(mode_text and _RANK_BOMB_RE.search(mode_text))
 
 
@@ -109,11 +60,11 @@ def _has_complete_rank_bomb_teams(teams: list[DakanuMatchTeam]) -> bool:
     camp_counts: dict[str, int] = {}
     seen_players: set[str] = set()
     for team in teams:
-        camp_id = team["id"].strip()
+        camp_id = team.id.strip()
         if not _CAMP_ID_RE.fullmatch(camp_id):
             return False
-        for player in team["players"]:
-            player_id = player["playerId"]
+        for player in team.players:
+            player_id = player.playerId
             if not player_id or player_id in seen_players:
                 return False
             seen_players.add(player_id)
@@ -128,45 +79,30 @@ def _is_cacheable_match_detail(
 ) -> bool:
     if detail is None:
         return False
-    if "ok" not in detail or detail["ok"] is not True:
+    if detail.ok is not True:
         return False
-    if "roomId" not in detail or detail["roomId"] != room_id:
+    if detail.roomId != room_id:
         return False
-    if "hasDetail" not in detail or detail["hasDetail"] is not True:
+    if detail.hasDetail is not True:
         return False
-    if "teams" not in detail or "rounds" not in detail:
+    if not detail.teams:
         return False
-    if not _is_valid_match_teams(detail["teams"]):
-        return False
-    if _is_rank_bomb_mode(detail, match_mode) and not _has_complete_rank_bomb_teams(detail["teams"]):
+    if _is_rank_bomb_mode(detail, match_mode) and not _has_complete_rank_bomb_teams(detail.teams):
         return False
     return True
 
 
 def _retarget_match_detail(detail: DakanuMatchDetail, player_id: str | None) -> DakanuMatchDetail:
     """按当前查看视角重算 isTarget，保证同一 roomId 跨玩家复用不串号。"""
-    teams = detail["teams"] if "teams" in detail else []
+    teams = detail.teams
     retargeted_teams: list[DakanuMatchTeam] = []
     for team in teams:
         players: list[DakanuMatchPlayer] = [
-            {**player, "isTarget": bool(player_id and player["playerId"] == player_id)} for player in team["players"]
+            player.model_copy(update={"isTarget": bool(player_id and player.playerId == player_id)})
+            for player in team.players
         ]
-        team_copy: DakanuMatchTeam = {
-            "id": team["id"],
-            "label": team["label"],
-            "players": players,
-        }
-        if "side" in team:
-            team_copy["side"] = team["side"]
-        if "sideLabel" in team:
-            team_copy["sideLabel"] = team["sideLabel"]
-        retargeted_teams.append(team_copy)
-    updated: DakanuMatchDetail = {**detail, "teams": retargeted_teams}
-    if player_id is not None:
-        updated["viewerPlayerId"] = player_id
-    else:
-        updated["viewerPlayerId"] = None
-    return updated
+        retargeted_teams.append(team.model_copy(update={"players": players}))
+    return detail.model_copy(update={"teams": retargeted_teams, "viewerPlayerId": player_id})
 
 
 def _safe_unlink(path: Path) -> None:
@@ -202,19 +138,24 @@ def _read_detail_from_disk_sync(room_id: str, match_mode: str | None) -> DakanuM
         _safe_unlink(path)
         return None
     detail_obj = raw["detail"]
-    if not is_match_detail_response(detail_obj) or not _is_cacheable_match_detail(detail_obj, room_id, match_mode):
+    if not isinstance(detail_obj, dict):
+        _safe_unlink(path)
+        return None
+    try:
+        detail = DakanuMatchDetail.model_validate(detail_obj)
+    except ValueError:
+        _safe_unlink(path)
+        return None
+    if not _is_cacheable_match_detail(detail, room_id, match_mode):
         _safe_unlink(path)
         return None
     touch_cache_mtime(path)
-    return detail_obj
+    return detail
 
 
 def _write_detail_to_disk_sync(room_id: str, detail: DakanuMatchDetail) -> None:
     path = match_detail_cache_path(room_id)
-    record: _MatchDetailDiskRecord = {
-        "saved_at": int(time.time()),
-        "detail": detail,
-    }
+    record = {"saved_at": int(time.time()), "detail": detail.model_dump(mode="json", by_alias=True)}
     serialized = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
     _atomic_write_text(path, serialized)
 

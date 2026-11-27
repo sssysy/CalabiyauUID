@@ -1,8 +1,8 @@
 """卡拉彼丘插件功能说明、设定图鉴与 Wiki 知识库注册。"""
 
-import json
 from pathlib import Path
-from dataclasses import dataclass
+
+from pydantic import Field, BaseModel, ConfigDict
 
 from gsuid_core.logger import logger
 from gsuid_core.ai_core.models import KnowledgePoint
@@ -16,14 +16,16 @@ _PLUGIN_NAME = "CalabiyauUID"
 _LOG_TAG = "[卡拉彼丘·知识库]"
 
 
-@dataclass(frozen=True)
-class _SkillModeValue:
+class _KnowledgeModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore", frozen=True)
+
+
+class _SkillModeValue(_KnowledgeModel):
     mode: str
     values: dict[str, str]
 
 
-@dataclass(frozen=True)
-class _RoleSkill:
+class _RoleSkill(_KnowledgeModel):
     slot: str
     key: str
     name: str
@@ -32,39 +34,38 @@ class _RoleSkill:
     mode_values: tuple[_SkillModeValue, ...]
 
 
-@dataclass(frozen=True)
-class _RoleAwakening:
+class _UnlockNodes(_KnowledgeModel):
+    weapon: int
+    defense: int
+    skill: int
+
+
+class _RoleAwakening(_KnowledgeModel):
     tier: int
     name: str
     description: str
-    weapon_nodes: int
-    defense_nodes: int
-    skill_nodes: int
+    unlock_nodes: _UnlockNodes
 
 
-@dataclass(frozen=True)
-class _GrowthNode:
+class _GrowthNode(_KnowledgeModel):
     desc: str
     cost: int
     effect: str
 
 
-@dataclass(frozen=True)
-class _GrowthGroup:
+class _GrowthGroup(_KnowledgeModel):
     slot: str
     name: str
     nodes: tuple[_GrowthNode, ...]
 
 
-@dataclass(frozen=True)
-class _GrowthMode:
+class _GrowthMode(_KnowledgeModel):
     mode: str
     groups: tuple[_GrowthGroup, ...]
 
 
-@dataclass(frozen=True)
-class _RoleData:
-    role_id: int
+class _RoleData(_KnowledgeModel):
+    role_id: int = Field(alias="id")
     name: str
     profile: dict[str, str]
     available_weapons: tuple[str, ...]
@@ -74,8 +75,7 @@ class _RoleData:
     growth_network: tuple[_GrowthMode, ...]
 
 
-@dataclass(frozen=True)
-class _PrimaryWeaponData:
+class _PrimaryWeaponData(_KnowledgeModel):
     name: str
     weapon_type: str
     users: tuple[str, ...]
@@ -87,8 +87,7 @@ class _PrimaryWeaponData:
     detail_stats: dict[str, str]
 
 
-@dataclass(frozen=True)
-class _SecondaryWeaponData:
+class _SecondaryWeaponData(_KnowledgeModel):
     name: str
     obtain: str
     intro: str
@@ -96,8 +95,7 @@ class _SecondaryWeaponData:
     damage_falloff_pc: dict[str, str]
 
 
-@dataclass(frozen=True)
-class _MeleeWeaponData:
+class _MeleeWeaponData(_KnowledgeModel):
     name: str
     obtain: str
     intro: str
@@ -105,8 +103,7 @@ class _MeleeWeaponData:
     handling: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class _TacticalItemData:
+class _TacticalItemData(_KnowledgeModel):
     name: str
     obtain: str
     intro: str
@@ -115,207 +112,56 @@ class _TacticalItemData:
     cooldowns_sec: dict[str, int]
 
 
-@dataclass(frozen=True)
-class _KristallData:
-    kristall_id: int
+class _KristallData(_KnowledgeModel):
+    kristall_id: int = Field(alias="id")
     name: str
     profile: dict[str, str]
     stats: dict[str, str]
     skills: dict[str, str]
 
 
-def _as_str_map(value: object) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise ValueError("JSON 结构必须为对象")
-    result: dict[str, object] = {}
-    for key, item in value.items():
-        if not isinstance(key, str):
-            raise ValueError("JSON 对象键必须为字符串")
-        result[key] = item
-    return result
+class _ManifestEntry(_KnowledgeModel):
+    path: str
 
 
-def _as_object_list(value: object) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError("JSON 结构必须为列表")
-    return [item for item in value]
+class _WeaponsManifest(_KnowledgeModel):
+    primary: tuple[_ManifestEntry, ...]
+    secondary: tuple[_ManifestEntry, ...]
+    melee: tuple[_ManifestEntry, ...]
+    tactical: tuple[_ManifestEntry, ...]
 
 
-def _as_str(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("字段必须为字符串")
-    return value
+class _KnowledgeManifest(_KnowledgeModel):
+    roles: tuple[_ManifestEntry, ...]
+    weapons: _WeaponsManifest
+    kristall: tuple[_ManifestEntry, ...]
 
 
-def _as_int(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("字段必须为整数")
-    return value
+class _BaseSpeedRow(_KnowledgeModel):
+    state: str
+    sprint: str
+    walk_hipfire: str
+    ads: str
 
 
-def _as_str_dict(value: object) -> dict[str, str]:
-    raw = _as_str_map(value)
-    out: dict[str, str] = {}
-    for key, item in raw.items():
-        out[key] = _as_str(item)
-    return out
+class _PrimarySpeedRow(_BaseSpeedRow):
+    weapon_type: str
+    roles: str
 
 
-def _as_str_tuple(value: object) -> tuple[str, ...]:
-    return tuple(_as_str(item) for item in _as_object_list(value))
+class _SpeedTable(_KnowledgeModel):
+    unarmed_or_secondary_or_tactical: tuple[_BaseSpeedRow, ...]
+    holding_primary_weapon: tuple[_PrimarySpeedRow, ...]
 
 
-def _as_int_dict(value: object) -> dict[str, int]:
-    raw = _as_str_map(value)
-    out: dict[str, int] = {}
-    for key, item in raw.items():
-        out[key] = _as_int(item)
-    return out
+class _KnowledgeIndex(_KnowledgeModel):
+    manifest: _KnowledgeManifest
+    speed_table: _SpeedTable
+    tactical_cooldowns: dict[str, dict[str, int]]
 
 
-def _read_json_object(path: Path) -> dict[str, object]:
-    raw: object = json.loads(path.read_text(encoding="utf-8"))
-    return _as_str_map(raw)
-
-
-def _parse_growth_network(raw: object) -> tuple[_GrowthMode, ...]:
-    modes: list[_GrowthMode] = []
-    for mode_item in _as_object_list(raw):
-        mode_obj = _as_str_map(mode_item)
-        groups: list[_GrowthGroup] = []
-        for grp_item in _as_object_list(mode_obj["groups"]):
-            grp_obj = _as_str_map(grp_item)
-            nodes: list[_GrowthNode] = []
-            for node_item in _as_object_list(grp_obj["nodes"]):
-                node_obj = _as_str_map(node_item)
-                nodes.append(
-                    _GrowthNode(
-                        desc=_as_str(node_obj["desc"]),
-                        cost=_as_int(node_obj["cost"]),
-                        effect=_as_str(node_obj["effect"]),
-                    )
-                )
-            groups.append(
-                _GrowthGroup(
-                    slot=_as_str(grp_obj["slot"]),
-                    name=_as_str(grp_obj["name"]),
-                    nodes=tuple(nodes),
-                )
-            )
-        modes.append(_GrowthMode(mode=_as_str(mode_obj["mode"]), groups=tuple(groups)))
-    return tuple(modes)
-
-
-def _parse_role_file(path: Path) -> _RoleData:
-    data = _read_json_object(path)
-    skills: list[_RoleSkill] = []
-    for skill_item in _as_object_list(data["skills"]):
-        skill_obj = _as_str_map(skill_item)
-        mode_values: list[_SkillModeValue] = []
-        for mv_item in _as_object_list(skill_obj["mode_values"]):
-            mv_obj = _as_str_map(mv_item)
-            mode_values.append(
-                _SkillModeValue(
-                    mode=_as_str(mv_obj["mode"]),
-                    values=_as_str_dict(mv_obj["values"]),
-                )
-            )
-        skills.append(
-            _RoleSkill(
-                slot=_as_str(skill_obj["slot"]),
-                key=_as_str(skill_obj["key"]),
-                name=_as_str(skill_obj["name"]),
-                description=_as_str(skill_obj["description"]),
-                analysis=_as_str(skill_obj["analysis"]),
-                mode_values=tuple(mode_values),
-            )
-        )
-
-    awakenings: list[_RoleAwakening] = []
-    for awk_item in _as_object_list(data["awakenings"]):
-        awk_obj = _as_str_map(awk_item)
-        unlock = _as_int_dict(awk_obj["unlock_nodes"])
-        awakenings.append(
-            _RoleAwakening(
-                tier=_as_int(awk_obj["tier"]),
-                name=_as_str(awk_obj["name"]),
-                description=_as_str(awk_obj["description"]),
-                weapon_nodes=unlock["weapon"],
-                defense_nodes=unlock["defense"],
-                skill_nodes=unlock["skill"],
-            )
-        )
-
-    return _RoleData(
-        role_id=_as_int(data["id"]),
-        name=_as_str(data["name"]),
-        profile=_as_str_dict(data["profile"]),
-        available_weapons=_as_str_tuple(data["available_weapons"]),
-        base_stats_pc=_as_str_dict(data["base_stats_pc"]),
-        skills=tuple(skills),
-        awakenings=tuple(awakenings),
-        growth_network=_parse_growth_network(data["growth_network"]),
-    )
-
-
-def _parse_primary_weapon_file(path: Path) -> _PrimaryWeaponData:
-    data = _read_json_object(path)
-    return _PrimaryWeaponData(
-        name=_as_str(data["name"]),
-        weapon_type=_as_str(data["weapon_type"]),
-        users=_as_str_tuple(data["users"]),
-        intro=_as_str(data["intro"]),
-        stats_pc=_as_str_dict(data["stats_pc"]),
-        damage_falloff_pc=_as_str_dict(data["damage_falloff_pc"]),
-        extra_notes=_as_str_tuple(data["extra_notes"]),
-        growth_network=_parse_growth_network(data["growth_network"]),
-        detail_stats=_as_str_dict(data["detail_stats"]),
-    )
-
-
-def _parse_secondary_weapon_file(path: Path) -> _SecondaryWeaponData:
-    data = _read_json_object(path)
-    return _SecondaryWeaponData(
-        name=_as_str(data["name"]),
-        obtain=_as_str(data["obtain"]),
-        intro=_as_str(data["intro"]),
-        stats_pc=_as_str_dict(data["stats_pc"]),
-        damage_falloff_pc=_as_str_dict(data["damage_falloff_pc"]),
-    )
-
-
-def _parse_melee_weapon_file(path: Path) -> _MeleeWeaponData:
-    data = _read_json_object(path)
-    return _MeleeWeaponData(
-        name=_as_str(data["name"]),
-        obtain=_as_str(data["obtain"]),
-        intro=_as_str(data["intro"]),
-        damage_pc=_as_str_dict(data["damage_pc"]),
-        handling=_as_str_tuple(data["handling"]),
-    )
-
-
-def _parse_tactical_item_file(path: Path) -> _TacticalItemData:
-    data = _read_json_object(path)
-    return _TacticalItemData(
-        name=_as_str(data["name"]),
-        obtain=_as_str(data["obtain"]),
-        intro=_as_str(data["intro"]),
-        effect=_as_str(data["effect"]),
-        extra_data=_as_str_tuple(data["extra_data"]),
-        cooldowns_sec=_as_int_dict(data["cooldowns_sec"]),
-    )
-
-
-def _parse_kristall_file(path: Path) -> _KristallData:
-    data = _read_json_object(path)
-    return _KristallData(
-        kristall_id=_as_int(data["id"]),
-        name=_as_str(data["name"]),
-        profile=_as_str_dict(data["profile"]),
-        stats=_as_str_dict(data["stats"]),
-        skills=_as_str_dict(data["skills"]),
-    )
+def _load_model[ModelT: BaseModel](path: Path, model_cls: type[ModelT]) -> ModelT:
+    return model_cls.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def _resolve_safe_path(base_dir: Path, rel_path: str) -> Path:
@@ -465,7 +311,7 @@ def _register_role_entities(role: _RoleData) -> int:
         for awk in role.awakenings:
             skill_lines.append(
                 f"- **觉醒 {awk.tier}：{awk.name}**"
-                f"（需武器 {awk.weapon_nodes} / 防御 {awk.defense_nodes} / 技能 {awk.skill_nodes} 节点）："
+                f"（需武器 {awk.unlock_nodes.weapon} / 防御 {awk.unlock_nodes.defense} / 技能 {awk.unlock_nodes.skill} 节点）："
                 f"{awk.description}"
             )
         skill_lines.append("")
@@ -647,41 +493,27 @@ def _register_kristall_entity(kristall: _KristallData) -> None:
 
 
 def _register_from_knowledge_dir(knowledge_dir: Path) -> int:
-    index_data = _read_json_object(knowledge_dir / "index.json")
-    manifest = _as_str_map(index_data["manifest"])
-    weapons_manifest = _as_str_map(manifest["weapons"])
-
-    roles: list[_RoleData] = []
-    for entry_raw in _as_object_list(manifest["roles"]):
-        entry = _as_str_map(entry_raw)
-        roles.append(_parse_role_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"]))))
-
-    primary_weapons: list[_PrimaryWeaponData] = []
-    for entry_raw in _as_object_list(weapons_manifest["primary"]):
-        entry = _as_str_map(entry_raw)
-        primary_weapons.append(_parse_primary_weapon_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"]))))
-
-    secondary_weapons: list[_SecondaryWeaponData] = []
-    for entry_raw in _as_object_list(weapons_manifest["secondary"]):
-        entry = _as_str_map(entry_raw)
-        secondary_weapons.append(
-            _parse_secondary_weapon_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"])))
-        )
-
-    melee_weapons: list[_MeleeWeaponData] = []
-    for entry_raw in _as_object_list(weapons_manifest["melee"]):
-        entry = _as_str_map(entry_raw)
-        melee_weapons.append(_parse_melee_weapon_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"]))))
-
-    tactical_items: list[_TacticalItemData] = []
-    for entry_raw in _as_object_list(weapons_manifest["tactical"]):
-        entry = _as_str_map(entry_raw)
-        tactical_items.append(_parse_tactical_item_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"]))))
-
-    kristall_list: list[_KristallData] = []
-    for entry_raw in _as_object_list(manifest["kristall"]):
-        entry = _as_str_map(entry_raw)
-        kristall_list.append(_parse_kristall_file(_resolve_safe_path(knowledge_dir, _as_str(entry["path"]))))
+    index = _load_model(knowledge_dir / "index.json", _KnowledgeIndex)
+    manifest = index.manifest
+    roles = [_load_model(_resolve_safe_path(knowledge_dir, entry.path), _RoleData) for entry in manifest.roles]
+    primary_weapons = [
+        _load_model(_resolve_safe_path(knowledge_dir, entry.path), _PrimaryWeaponData)
+        for entry in manifest.weapons.primary
+    ]
+    secondary_weapons = [
+        _load_model(_resolve_safe_path(knowledge_dir, entry.path), _SecondaryWeaponData)
+        for entry in manifest.weapons.secondary
+    ]
+    melee_weapons = [
+        _load_model(_resolve_safe_path(knowledge_dir, entry.path), _MeleeWeaponData) for entry in manifest.weapons.melee
+    ]
+    tactical_items = [
+        _load_model(_resolve_safe_path(knowledge_dir, entry.path), _TacticalItemData)
+        for entry in manifest.weapons.tactical
+    ]
+    kristall_list = [
+        _load_model(_resolve_safe_path(knowledge_dir, entry.path), _KristallData) for entry in manifest.kristall
+    ]
 
     count = _register_core_guides()
 
@@ -737,23 +569,18 @@ def _register_from_knowledge_dir(knowledge_dir: Path) -> int:
     count += 1
 
     # 全局总表 3：移速表与战术道具冷却时间表
-    speed_table = _as_str_map(index_data["speed_table"])
-    tactical_cooldowns = _as_str_map(index_data["tactical_cooldowns"])
     mech_lines: list[str] = ["# 卡拉彼丘超弦体移速表与战术道具冷却时间表（PC端）", ""]
     mech_lines.append("## 未持主武器 / 持副武器 / 持战术道具移速")
-    for row_raw in _as_object_list(speed_table["unarmed_or_secondary_or_tactical"]):
-        row = _as_str_map(row_raw)
-        mech_lines.append(f"- {row['state']}：疾跑 {row['sprint']}｜行走/腰射 {row['walk_hipfire']}｜开镜 {row['ads']}")
+    for row in index.speed_table.unarmed_or_secondary_or_tactical:
+        mech_lines.append(f"- {row.state}：疾跑 {row.sprint}｜行走/腰射 {row.walk_hipfire}｜开镜 {row.ads}")
     mech_lines.extend(["", "## 持主武器移速"])
-    for row_raw in _as_object_list(speed_table["holding_primary_weapon"]):
-        row = _as_str_map(row_raw)
+    for row in index.speed_table.holding_primary_weapon:
         mech_lines.append(
-            f"- {row['weapon_type']}（{row['roles']}）[{row['state']}]："
-            f"疾跑 {row['sprint']}｜行走/腰射 {row['walk_hipfire']}｜开镜 {row['ads']}"
+            f"- {row.weapon_type}（{row.roles}）[{row.state}]："
+            f"疾跑 {row.sprint}｜行走/腰射 {row.walk_hipfire}｜开镜 {row.ads}"
         )
     mech_lines.extend(["", "## 战术道具冷却时间表"])
-    for item_name, modes_raw in tactical_cooldowns.items():
-        modes = _as_int_dict(modes_raw)
+    for item_name, modes in index.tactical_cooldowns.items():
         cd_text = "｜".join(f"{mode} {sec}秒" for mode, sec in modes.items())
         mech_lines.append(f"- **{item_name}**：{cd_text}")
 

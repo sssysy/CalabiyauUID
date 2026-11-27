@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card
-from ....api.dakanu import DakanuClan, DakanuClanMember
+from ....api.dakanu.models.clan import DakanuClan, DakanuClanMember
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class ClanTemplateContext(CardTemplateContext):
 
 
 def _is_leader_member(member: DakanuClanMember) -> bool:
-    return bool(member["isLeader"]) or member["position"] == 1
+    return bool(member.isLeader) or member.position == 1
 
 
 def _sort_members(members: Sequence[DakanuClanMember]) -> list[DakanuClanMember]:
@@ -44,7 +44,7 @@ def _sort_members(members: Sequence[DakanuClanMember]) -> list[DakanuClanMember]
         members,
         key=lambda item: (
             0 if _is_leader_member(item) else 1,
-            -(item["level"] if item["level"] is not None else -1),
+            -(item.level if item.level is not None else -1),
         ),
     )
 
@@ -54,14 +54,14 @@ def _build_member_item(
     member: DakanuClanMember,
     avatar_images: Mapping[int, str],
 ) -> ClanMemberItem:
-    player_id = member["playerId"]
-    nickname = member["nickname"].strip() or f"玩家 {player_id}"
-    avatar_id = member["avatarId"]
+    player_id = member.playerId
+    nickname = member.nickname.strip() or f"玩家 {player_id}"
+    avatar_id = member.avatarId
     avatar = avatar_images[avatar_id] if avatar_id is not None and avatar_id in avatar_images else ""
     is_leader = _is_leader_member(member)
-    position = member["position"]
+    position = member.position
     position_text = f"职位 {position}" if not is_leader and position is not None else ""
-    level = member["level"]
+    level = member.level
     sub_parts: list[str] = []
     if level is not None:
         sub_parts.append(f"Lv.{level}")
@@ -91,15 +91,15 @@ def build_clan_context(
         right = items[idx + 1] if idx + 1 < len(items) else None
         rows.append(ClanMemberPair(left=left, right=right))
 
-    levels = [member["level"] for member in ordered if member["level"] is not None]
+    levels = [member.level for member in ordered if member.level is not None]
     avg_level_text = f"Lv.{round(sum(levels) / len(levels))}" if levels else "—"
     max_level_text = f"Lv.{max(levels)}" if levels else "—"
 
     return ClanTemplateContext(
-        clan_name=clan["name"].strip() or "未命名战队",
-        clan_level_text=f"Lv.{clan['level']}",
-        clan_id=clan["clanId"],
-        intro=clan["intro"].strip(),
+        clan_name=clan.name.strip() or "未命名战队",
+        clan_level_text=f"Lv.{clan.level}",
+        clan_id=clan.clanId,
+        intro=clan.intro.strip(),
         avg_level_text=avg_level_text,
         max_level_text=max_level_text,
         rows=tuple(rows),

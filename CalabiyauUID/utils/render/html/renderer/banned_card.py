@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 from ..render import CARD_WIDTH, CardTemplateContext, render_card, render_template
 from .summary_card import tier_display
-from ....api.dakanu import DakanuBannedEntry
+from ....api.dakanu.models.banned import DakanuBannedEntry
 
 _BEIJING_TZ = timezone(timedelta(hours=8))
 _GRID_COLUMNS = 3
@@ -55,23 +55,23 @@ def _build_item_view(
     avatar_images: Mapping[int, str],
     tier_images: Mapping[int, str],
 ) -> BannedItemView:
-    avatar_id = entry["avatarId"]
+    avatar_id = entry.avatarId
     avatar = avatar_images[avatar_id] if avatar_id is not None and avatar_id in avatar_images else ""
-    nickname = entry["nickname"]
+    nickname = entry.nickname
     initial = nickname[0] if nickname else "?"
-    level = entry["level"]
+    level = entry.level
     level_text = f"Lv.{level}" if level is not None and level > 0 else ""
 
-    player_id = entry["playerId"]
+    player_id = entry.playerId
     is_masked = player_id is None or not player_id
     if player_id is not None and player_id:
         uid_text = f"UID {player_id}"
-    elif entry["maskedId"]:
-        uid_text = f"UID {entry['maskedId']}"
+    elif entry.maskedId:
+        uid_text = f"UID {entry.maskedId}"
     else:
         uid_text = "UID 未匹配"
 
-    tier_icon = _format_tier_icon(entry["segment"], tier_images)
+    tier_icon = _format_tier_icon(entry.segment, tier_images)
     return BannedItemView(
         index_text=f"#{index}",
         avatar=avatar,
@@ -80,7 +80,7 @@ def _build_item_view(
         level_text=level_text,
         uid_text=uid_text,
         tier_icon=tier_icon,
-        notice_date=_format_notice_date(entry["publishedAt"]),
+        notice_date=_format_notice_date(entry.publishedAt),
         is_masked=is_masked,
     )
 

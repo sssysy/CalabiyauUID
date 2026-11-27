@@ -4,15 +4,20 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 
-from gsuid_core.pool import to_thread
 from gsuid_core.models import Event
 
-from ..utils.api.dakanu import DakanuError, role_image_url
 from ..utils.downloader import resolve_image
 from ..utils.helper.maps import MapInfo, resolve_map, resolve_role_name
-from ..utils.helper.assets import image_data_uri, local_role_image, local_avatar_image, local_map_slug_image
+from ..utils.helper.assets import (
+    local_role_image,
+    local_avatar_image,
+    read_image_data_uri,
+    local_map_slug_image,
+)
 from ..utils.helper.refresh import ensure_player_snapshot
 from ..utils.helper.ai_bridge import emit_ai_text
+from ..utils.api.dakanu.assets import role_image_url
+from ..utils.api.dakanu.client import DakanuError
 from ..utils.helper.player_data import PlayerSnapshot
 from ..utils.database.model_bind import get_main_uid
 from ..utils.helper.recent_matches import MatchView, load_recent_match_views
@@ -31,7 +36,7 @@ async def resolve_match_player_id(ev: Event) -> tuple[str, str | None]:
 
 async def _load_recent_matches_data(player_id: str) -> tuple[PlayerSnapshot, list[MatchView]]:
     snapshot = await ensure_player_snapshot(player_id)
-    matches = snapshot.profile["matches"]
+    matches = snapshot.profile.matches
     if not matches:
         raise DakanuError("历史战绩为空。\n发送 kq刷新数据 更新后再查看。")
     views = await load_recent_match_views(player_id, matches, _RECENT_LIMIT)
@@ -51,15 +56,12 @@ def _map_url(slug: str) -> str:
     return f"https://www.dakanu.com/maps-wide/{slug}.webp"
 
 
-def _read_image_uri(path: Path) -> str:
-    return image_data_uri(path.read_bytes(), path.suffix)
-
-
 async def _resolve_image_uri(url: str, local_path: Path | None) -> str:
+    cached = await read_image_data_uri(local_path)
+    if cached:
+        return cached
     path = await resolve_image(url, local_path)
-    if path is None:
-        return ""
-    return await to_thread(_read_image_uri)(path)
+    return await read_image_data_uri(path)
 
 
 async def _load_avatar_images(avatar_ids: set[int]) -> dict[int, str]:
@@ -89,28 +91,28 @@ async def _load_map_images(map_infos: list[MapInfo]) -> dict[str, str]:
 
 
 async def _build_assets(snapshot: PlayerSnapshot, views: list[MatchView]) -> MatchCardAssets:
-    player = snapshot.profile["player"]
-    avatar_ids: set[int] = {player["avatarId"]}
+    player = snapshot.profile.player
+    avatar_ids: set[int] = {player.avatarId}
     role_ids: set[int] = set()
     map_infos: list[MapInfo] = []
     for view in views:
-        role_id = view.match["roleId"]
+        role_id = view.match.roleId
         if role_id is not None and role_id > 0:
             role_ids.add(role_id)
-        map_info = resolve_map(view.match["mapId"])
+        map_info = resolve_map(view.match.mapId)
         if map_info is not None:
             map_infos.append(map_info)
         for team in view.teams:
             for roster_player in team.players:
-                avatar_ids.add(roster_player["avatarId"])
+                avatar_ids.add(roster_player.avatarId)
 
     avatar_images, role_images, map_images = await asyncio.gather(
         _load_avatar_images(avatar_ids),
         _load_role_images(role_ids),
         _load_map_images(map_infos),
     )
-    player_avatar = avatar_images[player["avatarId"]] if player["avatarId"] in avatar_images else ""
-    clan_name = snapshot.clan["name"] if snapshot.clan is not None else ""
+    player_avatar = avatar_images[player.avatarId] if player.avatarId in avatar_images else ""
+    clan_name = snapshot.clan.name if snapshot.clan is not None else ""
     return MatchCardAssets(
         player_avatar=player_avatar,
         avatar_images=avatar_images,
@@ -122,36 +124,38 @@ async def _build_assets(snapshot: PlayerSnapshot, views: list[MatchView]) -> Mat
 
 def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[MatchView]) -> str:
     """提取最近对局摘要供 AI 复盘及衔接单局详情或回放下载。"""
-    player = snapshot.profile["player"]
+    player = snapshot.profile.player
     saved_time = datetime.fromtimestamp(snapshot.saved_at).strftime("%Y-%m-%d %H:%M")
-    lines: list[str] = [f"【{player['nickname']}（UID：{player['id']}）最近 {len(views)} 场历史战绩】"]
+    lines: list[str] = [f"【{player.nickname}（UID：{player.id}）最近 {len(views)} 场历史战绩】"]
     for idx, view in enumerate(views, start=1):
         match = view.match
-        map_info = resolve_map(match["mapId"])
-        map_name = map_info.name if map_info is not None else f"地图#{match['mapId']}"
-        role_id = match["roleId"]
+        map_info = resolve_map(match.mapId)
+        map_name = map_info.name if map_info is not None else f"地图#{match.mapId}"
+        role_id = match.roleId
         role_name = (resolve_role_name(role_id) or f"角色#{role_id}") if role_id is not None else "未知角色"
         score_text = (
-            f"{match['myScore']}:{match['opponentScore']}"
-            if match["myScore"] is not None and match["opponentScore"] is not None
+            f"{match.myScore}:{match.opponentScore}"
+            if match.myScore is not None and match.opponentScore is not None
             else "-"
         )
         delta_text = ""
-        if match["divisionScoreDelta"] is not None:
-            sign = "+" if match["divisionScoreDelta"] > 0 else ""
-            delta_text = f" 分数{sign}{match['divisionScoreDelta']}"
-        badge = " [MVP]" if match["mvp"] else (" [SVP]" if match["svp"] else "")
-        played_str = datetime.fromtimestamp(match["playedAt"] / 1000).strftime("%m-%d %H:%M")
-        duration_text = f"{match['durationSeconds']}s" if match["durationSeconds"] is not None else "-"
+        if match.divisionScoreDelta is not None:
+            sign = "+" if match.divisionScoreDelta > 0 else ""
+            delta_text = f" 分数{sign}{match.divisionScoreDelta}"
+        badge = " [MVP]" if match.mvp else (" [SVP]" if match.svp else "")
+        played_str = (
+            datetime.fromtimestamp(match.playedAt / 1000).strftime("%m-%d %H:%M") if match.playedAt is not None else "-"
+        )
+        duration_text = f"{match.durationSeconds}s" if match.durationSeconds is not None else "-"
         kda_text = (
-            f"{match['kills']}/{match['deaths']}/{match['assists']}"
-            if match["kills"] is not None and match["deaths"] is not None and match["assists"] is not None
+            f"{match.kills}/{match.deaths}/{match.assists}"
+            if match.kills is not None and match.deaths is not None and match.assists is not None
             else "-"
         )
         lines.append(
-            f"{idx}. [{match['result']}] {match['modeLabel']} · {map_name} · {role_name} | "
+            f"{idx}. [{match.result}] {match.modeLabel} · {map_name} · {role_name} | "
             f"比分 {score_text} | KDA {kda_text}{badge}{delta_text} | "
-            f"时长 {duration_text} | {played_str} | roomId={match['roomId']}"
+            f"时长 {duration_text} | {played_str} | roomId={match.roomId}"
         )
     lines.append(f"本地快照时间：{saved_time}")
     return "\n".join(lines)
@@ -159,8 +163,8 @@ def format_recent_matches_ai_summary(snapshot: PlayerSnapshot, views: list[Match
 
 async def build_recent_matches_card_from_snapshot(snapshot: PlayerSnapshot) -> bytes:
     """基于给定快照渲染最近历史战绩卡片。"""
-    player_id = snapshot.profile["player"]["id"]
-    matches = snapshot.profile["matches"]
+    player_id = snapshot.profile.player.id
+    matches = snapshot.profile.matches
     if not matches:
         raise DakanuError("历史战绩为空。\n发送 kq刷新数据 更新后再查看。")
     views = await load_recent_match_views(player_id, matches, _RECENT_LIMIT)
