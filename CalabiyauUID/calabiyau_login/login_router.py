@@ -10,7 +10,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from gsuid_core.web_app import app
 
-from .login_services import LOGIN_CACHE, send_fanbook_sms, submit_fanbook_login
+from .web_login_services import LOGIN_CACHE, send_fanbook_sms, submit_fanbook_login
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 _TEMPLATE_ENV = jinja2.Environment(

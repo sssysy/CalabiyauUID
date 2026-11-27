@@ -53,6 +53,15 @@
                 "need_admin": false
             },
             {
+                "name": "扫码登录",
+                "desc": "通过 Fanbook 客户端扫码完成登录",
+                "eg": "扫码登录",
+                "highlight": 0,
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
                 "name": "登出",
                 "desc": "退出当前 Fanbook 登录并清除本地凭证（别名：退出）",
                 "eg": "登出",

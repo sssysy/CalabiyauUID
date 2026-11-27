@@ -7,7 +7,7 @@ import time
 import uuid
 import base64
 import hashlib
-from typing import Any, Annotated
+from typing import Any, Literal, Annotated
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -24,6 +24,8 @@ _WEB_VERSION = "2.0.7"
 _BUILD_NUMBER = "1128"
 _DEFAULT_CAPTCHA_APP_ID = "197534779"
 _DEFAULT_EXPIRE_SECONDS = 2592000
+_DEFAULT_QR_TTL_SECONDS = 300
+_QR_EXPIRED_CODES = frozenset({1158})
 _LOG_TAG = "[卡拉彼丘·Fanbook登录]"
 
 _FBE_TABLE: dict[str, str] = {
@@ -123,6 +125,24 @@ class FanbookRefreshResult:
     expire_at_ts: int
 
 
+@dataclass(frozen=True, slots=True)
+class FanbookQrCodeSession:
+    """Fanbook 扫码登录二维码初始化结果。"""
+
+    code: str
+    url: str
+    expired_at_ts: int
+    device_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FanbookQrPollResult:
+    """Fanbook 扫码登录单次轮询结果。"""
+
+    status: Literal["waiting", "scanned", "confirmed", "expired"]
+    token: str = ""
+
+
 def _coerce_str(value: Any) -> str:
     return (
         value
@@ -137,9 +157,20 @@ def _coerce_int(value: Any) -> int:
     return int(value) if isinstance(value, str) and value.isdigit() else 0
 
 
+def _coerce_signed_int(value: Any) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lstrip("-").isdigit() and stripped != "-":
+            return int(stripped)
+    return 0
+
+
 _CoercedStr = Annotated[str, BeforeValidator(_coerce_str)]
 _OnlyStr = Annotated[str, BeforeValidator(lambda val: val if isinstance(val, str) else "")]
 _CoercedInt = Annotated[int, BeforeValidator(_coerce_int)]
+_SignedInt = Annotated[int, BeforeValidator(_coerce_signed_int)]
 _OptInt = Annotated[
     int | None, BeforeValidator(lambda val: val if isinstance(val, int) and not isinstance(val, bool) else None)
 ]
@@ -172,6 +203,14 @@ class _LoginData(_FanbookModel):
     avatar: _CoercedStr = ""
     sign: _CoercedStr = ""
     expire_time: _CoercedInt = 0
+
+
+class _QrCodeData(_FanbookModel):
+    code: _CoercedStr = ""
+    url: _OnlyStr = ""
+    status: _SignedInt = 0
+    expired_at: _CoercedInt = 0
+    token: _OnlyStr = ""
 
 
 def fbe_encode(raw_text: str) -> str:
@@ -335,6 +374,14 @@ async def login_by_mobile(
         "mobile": fbe_encode(mobile),
     }
     envelope, headers = await _post_fanbook_api("/api/user/login", body, device_id=device_id)
+    return _parse_login_session(envelope, headers, device_id)
+
+
+def _parse_login_session(
+    envelope: _FanbookEnvelope,
+    headers: httpx.Headers,
+    device_id: str,
+) -> FanbookUserSession:
     try:
         data = _LoginData.model_validate(envelope.data)
     except ValidationError as exc:
@@ -354,6 +401,65 @@ async def login_by_mobile(
         expire_at_ts=expire_at_ts,
         device_id=device_id,
     )
+
+
+async def create_qrcode_login(device_id: str) -> FanbookQrCodeSession:
+    """向 Fanbook 申请扫码登录二维码。"""
+    envelope, _ = await _post_fanbook_api("/api/login/qrcode", {}, device_id=device_id)
+    try:
+        data = _QrCodeData.model_validate(envelope.data)
+    except ValidationError as exc:
+        raise FanbookError("Fanbook 二维码响应格式异常。") from exc
+    if not data.code or not data.url:
+        raise FanbookError("Fanbook 未返回有效的登录二维码。")
+
+    expired_at_ts = data.expired_at if data.expired_at > 0 else int(time.time()) + _DEFAULT_QR_TTL_SECONDS
+    return FanbookQrCodeSession(
+        code=data.code,
+        url=data.url,
+        expired_at_ts=expired_at_ts,
+        device_id=device_id,
+    )
+
+
+async def poll_qrcode_login(*, code: str, device_id: str) -> FanbookQrPollResult:
+    """查询 Fanbook 扫码登录二维码当前状态。"""
+    try:
+        envelope, _ = await _post_fanbook_api(
+            "/api/login/qrcode",
+            {"code": code},
+            device_id=device_id,
+        )
+    except FanbookError as exc:
+        if exc.code in _QR_EXPIRED_CODES:
+            return FanbookQrPollResult(status="expired")
+        raise
+
+    try:
+        data = _QrCodeData.model_validate(envelope.data)
+    except ValidationError as exc:
+        raise FanbookError("Fanbook 扫码状态响应格式异常。") from exc
+
+    if data.status == -1:
+        return FanbookQrPollResult(status="expired")
+    if data.status == 1:
+        return FanbookQrPollResult(status="scanned")
+    if data.status == 2:
+        if not data.token:
+            raise FanbookError("Fanbook 扫码已确认，但未返回登录令牌。")
+        return FanbookQrPollResult(status="confirmed", token=data.token)
+    return FanbookQrPollResult(status="waiting")
+
+
+async def login_by_qr_token(*, token: str, device_id: str) -> FanbookUserSession:
+    """使用扫码确认后返回的临时令牌完成 Fanbook Web 登录。"""
+    body: dict[str, Any] = {
+        "device": _PLATFORM,
+        "type": "token",
+        "token": token,
+    }
+    envelope, headers = await _post_fanbook_api("/api/user/login", body, device_id=device_id)
+    return _parse_login_session(envelope, headers, device_id)
 
 
 async def refresh_token(
