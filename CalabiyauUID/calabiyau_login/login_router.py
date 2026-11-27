@@ -10,6 +10,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from gsuid_core.web_app import app
 
+from .login_common import LOGIN_ROUTE_PREFIX
 from .web_login_services import LOGIN_CACHE, send_fanbook_sms, submit_fanbook_login
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -34,7 +35,7 @@ class _LoginPayload(BaseModel):
     code: str
 
 
-@app.get("/kq/fanbook/i/{auth_token}")
+@app.get(f"{LOGIN_ROUTE_PREFIX}/{{auth_token}}")
 async def fanbook_login_page(auth_token: str) -> HTMLResponse:
     state = LOGIN_CACHE.get(auth_token)
     template = _TEMPLATE_ENV.get_template("fanbook_login.html")
@@ -58,7 +59,7 @@ async def fanbook_login_page(auth_token: str) -> HTMLResponse:
     return HTMLResponse(html)
 
 
-@app.post("/kq/fanbook/sendSmsCode")
+@app.post(f"{LOGIN_ROUTE_PREFIX}/sendSmsCode")
 async def fanbook_send_sms(payload: _SendSmsPayload) -> JSONResponse:
     ok, msg = await send_fanbook_sms(
         auth_token=payload.auth,
@@ -70,7 +71,7 @@ async def fanbook_send_sms(payload: _SendSmsPayload) -> JSONResponse:
     return JSONResponse({"ok": ok, "msg": msg}, status_code=200 if ok else 400)
 
 
-@app.post("/kq/fanbook/login")
+@app.post(LOGIN_ROUTE_PREFIX)
 async def fanbook_perform_login(payload: _LoginPayload) -> JSONResponse:
     ok, msg = await submit_fanbook_login(
         auth_token=payload.auth,

@@ -15,6 +15,7 @@ from ..utils.database.model_fanbook import CalabiyauFanbookUser
 
 LOG_TAG = "[卡拉彼丘·Fanbook登录]"
 DEFAULT_LOGIN_TTL_S = 300
+LOGIN_ROUTE_PREFIX = "/kq/login"
 
 _evictors: list[Callable[[str, str], None]] = []
 

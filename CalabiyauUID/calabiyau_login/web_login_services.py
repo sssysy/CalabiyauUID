@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 import uuid
 import asyncio
@@ -16,6 +17,7 @@ from gsuid_core.models import Event
 
 from .login_common import (
     LOG_TAG,
+    LOGIN_ROUTE_PREFIX,
     DEFAULT_LOGIN_TTL_S,
     send_login_text,
     evict_login_sessions,
@@ -33,6 +35,15 @@ from ..utils.api.fanbook import (
 
 _POLL_INTERVAL_S = 1.5
 _MAX_CACHE_SIZE = 64
+_SMS_COOLDOWN_S = 60.0
+_SMS_MAX_ATTEMPTS_PER_SESSION = 5
+_MOBILE_SMS_WINDOW_S = 600.0
+_MOBILE_SMS_MAX_PER_WINDOW = 3
+_MOBILE_LIMIT_MAX_ENTRIES = 512
+_LOGIN_MAX_FAILURES = 5
+_LOGIN_LOCK_S = 300.0
+
+_throttle_lock = asyncio.Lock()
 
 
 @dataclass(slots=True, kw_only=True)
@@ -46,6 +57,57 @@ class LoginSessionState:
     done: bool = False
     evicted: bool = False
     session: FanbookUserSession | None = None
+    sms_attempt_count: int = 0
+    last_sms_attempt_at: float = 0.0
+    failed_login_count: int = 0
+    locked_until: float = 0.0
+
+
+class MobileSmsLimiter:
+    """按区号与手机号限制短信发送频率，进程内滚动窗口。"""
+
+    def __init__(self, *, max_entries: int = _MOBILE_LIMIT_MAX_ENTRIES) -> None:
+        self._records: OrderedDict[str, list[float]] = OrderedDict()
+        self._max_entries = max_entries
+
+    def _active_attempts(self, key: str, now: float) -> list[float]:
+        attempts = self._records.get(key)
+        if attempts is None:
+            return []
+        cutoff = now - _MOBILE_SMS_WINDOW_S
+        kept = [attempt for attempt in attempts if attempt > cutoff]
+        if kept:
+            self._records[key] = kept
+            self._records.move_to_end(key)
+        else:
+            self._records.pop(key, None)
+        return kept
+
+    def retry_after(self, key: str, now: float) -> int | None:
+        attempts = self._active_attempts(key, now)
+        if not attempts:
+            return None
+        if len(attempts) >= _MOBILE_SMS_MAX_PER_WINDOW:
+            return max(1, math.ceil(attempts[0] + _MOBILE_SMS_WINDOW_S - now))
+        last_attempt = attempts[-1]
+        if now - last_attempt < _SMS_COOLDOWN_S:
+            return max(1, math.ceil(_SMS_COOLDOWN_S - (now - last_attempt)))
+        return None
+
+    def record(self, key: str, now: float) -> None:
+        attempts = self._active_attempts(key, now)
+        attempts.append(now)
+        self._records[key] = attempts
+        self._records.move_to_end(key)
+        while len(self._records) > self._max_entries:
+            self._records.popitem(last=False)
+
+
+_mobile_sms_limiter = MobileSmsLimiter()
+
+
+def _retry_message(wait_seconds: int) -> str:
+    return f"操作过于频繁，请约 {wait_seconds} 秒后再试。"
 
 
 class TimedLoginCache:
@@ -152,6 +214,22 @@ async def send_fanbook_sms(
         return False, "手机号格式不正确。"
     if not ticket.strip() or not rand_str.strip():
         return False, "安全滑块验证票据无效，请重试。"
+    now = time.monotonic()
+    mobile_key = f"{cleaned_area}:{cleaned_mobile}"
+    async with _throttle_lock:
+        if state.locked_until > now:
+            return False, _retry_message(max(1, math.ceil(state.locked_until - now)))
+        if state.sms_attempt_count >= _SMS_MAX_ATTEMPTS_PER_SESSION:
+            return False, "当前登录链接获取验证码次数过多，请重新发送 kq登录。"
+        if state.last_sms_attempt_at > 0 and now - state.last_sms_attempt_at < _SMS_COOLDOWN_S:
+            wait_seconds = max(1, math.ceil(_SMS_COOLDOWN_S - (now - state.last_sms_attempt_at)))
+            return False, _retry_message(wait_seconds)
+        mobile_wait = _mobile_sms_limiter.retry_after(mobile_key, now)
+        if mobile_wait is not None:
+            return False, _retry_message(mobile_wait)
+        state.sms_attempt_count += 1
+        state.last_sms_attempt_at = now
+        _mobile_sms_limiter.record(mobile_key, now)
     try:
         await send_sms_code(
             mobile=cleaned_mobile,
@@ -184,6 +262,9 @@ async def submit_fanbook_login(
         return False, "手机号格式不正确。"
     if not cleaned_code.isdigit() or len(cleaned_code) < 4:
         return False, "请输入有效的短信验证码。"
+    now = time.monotonic()
+    if state.locked_until > now:
+        return False, _retry_message(max(1, math.ceil(state.locked_until - now)))
 
     try:
         session = await login_by_mobile(
@@ -193,8 +274,14 @@ async def submit_fanbook_login(
             device_id=state.device_id,
         )
     except FanbookError as exc:
+        state.failed_login_count += 1
+        if state.failed_login_count >= _LOGIN_MAX_FAILURES:
+            state.failed_login_count = 0
+            state.locked_until = time.monotonic() + _LOGIN_LOCK_S
+            return False, "登录失败次数过多，请 5 分钟后再试，或重新发送 kq登录。"
         return False, f"登录失败：{exc}"
 
+    state.failed_login_count = 0
     state.session = session
     state.done = True
     return True, "Fanbook 登录成功。"
@@ -241,7 +328,7 @@ async def request_fanbook_login(bot: Bot, ev: Event) -> None:
     )
     LOGIN_CACHE.set(auth_token, state, ttl_seconds)
 
-    login_url = f"{base_url}/kq/fanbook/i/{auth_token}"
+    login_url = f"{base_url}{LOGIN_ROUTE_PREFIX}/{auth_token}"
     logger.info(f"{LOG_TAG} 生成登录链接 user_id={ev.user_id} ttl={ttl_seconds}s")
     await _send_login_prompt(bot, ev, login_url, ttl_seconds)
 

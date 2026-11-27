@@ -5,7 +5,7 @@
             {
                 "name": "绑定账号",
                 "desc": "绑定卡拉彼丘国服账号并拉取首次战绩",
-                "eg": "绑定1234567",
+                "eg": "绑定 1234567",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -14,7 +14,7 @@
             {
                 "name": "解绑账号",
                 "desc": "解绑已绑定的卡拉彼丘账号",
-                "eg": "解绑1234567",
+                "eg": "解绑 1234567",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -32,7 +32,7 @@
             {
                 "name": "切换账号",
                 "desc": "切换当前主账号，不传参默认切至下一个",
-                "eg": "切换",
+                "eg": "切换 (1234567)",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -132,7 +132,7 @@
             {
                 "name": "战绩总览",
                 "desc": "查看指定或当前绑定账号的生涯战绩总览卡片",
-                "eg": "战绩总览1234567",
+                "eg": "战绩总览 (s13) (1234567)",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -150,7 +150,7 @@
             {
                 "name": "对局分析",
                 "desc": "分析指定对局 ID 的总览与逐回合战绩数据",
-                "eg": "对局分析12345678",
+                "eg": "对局分析 123456789012345678",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -159,7 +159,7 @@
             {
                 "name": "刷新数据",
                 "desc": "从战绩站点重新拉取最新玩家缓存",
-                "eg": "刷新数据1234567",
+                "eg": "刷新数据 1234567",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -168,7 +168,7 @@
             {
                 "name": "回放下载",
                 "desc": "下载指定对局 ID 的回放文件并发送",
-                "eg": "回放下载12345678",
+                "eg": "回放下载 123456789012345678",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -177,7 +177,7 @@
             {
                 "name": "战队查询",
                 "desc": "查看指定战队或当前绑定账号所在战队信息",
-                "eg": "战队查询jmcomic",
+                "eg": "战队查询 jmcomic",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -198,7 +198,7 @@
                 "need_admin": false
             },
             {
-                "name": "团竞排行",
+                "name": "团队排行",
                 "desc": "查看团队乱斗榜前 50 名",
                 "eg": "团队排行",
                 "highlight": 0,
@@ -207,7 +207,7 @@
                 "need_admin": false
             },
             {
-                "name": "推车排行",
+                "name": "推进排行",
                 "desc": "查看极限推进榜前 50 名",
                 "eg": "推进排行",
                 "highlight": 0,
@@ -216,7 +216,7 @@
                 "need_admin": false
             },
             {
-                "name": "匹配排行",
+                "name": "挑战排行",
                 "desc": "查看挑战榜前 50 名",
                 "eg": "挑战排行",
                 "highlight": 0,
@@ -225,7 +225,7 @@
                 "need_admin": false
             },
             {
-                "name": "生化排行",
+                "name": "感染排行",
                 "desc": "查看晶源感染榜前 50 名",
                 "eg": "感染排行",
                 "highlight": 0,
@@ -236,7 +236,7 @@
             {
                 "name": "角色排行",
                 "desc": "支持 角色[排位|全部][出场率|胜率]排行",
-                "eg": "角色排位胜率排行",
+                "eg": "角色(排位|全部)(出场率|胜率)排行",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -245,7 +245,7 @@
             {
                 "name": "超弦体排行",
                 "desc": "查看指定角色名或角色 ID 的单榜前 50 名",
-                "eg": "超弦体排行千代",
+                "eg": "超弦体排行 (s13) 糖猫",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -259,7 +259,7 @@
             {
                 "name": "抽表情",
                 "desc": "随机发送卡拉彼丘表情包，可附带角色名或别名",
-                "eg": "抽表情 星绘",
+                "eg": "抽表情 (星绘)",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -322,7 +322,7 @@
             {
                 "name": "活跃图",
                 "desc": "查看玩家活跃趋势卡片，支持 6h/24h/7d/30d",
-                "eg": "活跃图",
+                "eg": "活跃图(6h|24h|7d|30d)",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,
@@ -340,7 +340,7 @@
             {
                 "name": "封神榜",
                 "desc": "查看默认前 21 条封神榜，或附带昵称/UID 查询封禁信息",
-                "eg": "封神榜",
+                "eg": "封神榜 (1234567)",
                 "highlight": 0,
                 "need_ck": false,
                 "need_sk": false,

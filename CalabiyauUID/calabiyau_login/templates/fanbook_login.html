@@ -277,7 +277,7 @@
           sendBtn.textContent = "发送中…";
           refreshButtons();
           try {
-            const res = await postJson("/kq/fanbook/sendSmsCode", {
+            const res = await postJson("/kq/login/sendSmsCode", {
               auth: AUTH,
               areaCode: areaCodeEl.value,
               mobile: mobileEl.value.trim(),
@@ -343,7 +343,7 @@
           submitBtn.textContent = "登录中…";
           refreshButtons();
           try {
-            const res = await postJson("/kq/fanbook/login", {
+            const res = await postJson("/kq/login", {
               auth: AUTH,
               areaCode: areaCodeEl.value,
               mobile: mobileEl.value.trim(),

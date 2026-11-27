@@ -588,8 +588,9 @@ async def build_match_analysis_card(room_id: str) -> bytes:
     role_ids: set[int] = set()
     for team in active_teams:
         for player_id in team.player_ids:
-            if player_id in detail_players and detail_players[player_id]["roleId"] > 0:
-                role_ids.add(detail_players[player_id]["roleId"])
+            detail_player = detail_players[player_id] if player_id in detail_players else None
+            if detail_player is not None and detail_player.roleId > 0:
+                role_ids.add(detail_player.roleId)
             if player_id in stats_players:
                 fallback_id = stats_players[player_id].role_id
                 if fallback_id is not None and fallback_id > 0:
