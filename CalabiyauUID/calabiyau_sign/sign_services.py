@@ -31,6 +31,7 @@ from ..utils.helper.fanbook_auth import (
 )
 from ..utils.database.model_fanbook import CalabiyauFanbookUser
 from ..utils.helper.subscribe_common import (
+    SIGN_SUBSCRIBE_TASK_NAME,
     DEFAULT_SEND_INTERVAL_SECONDS,
     get_all_subscribers,
     subscribe_scope_key,
@@ -42,7 +43,6 @@ from ..utils.render.html.renderer.fanbook_auto_sign_card import (
     render_auto_sign_card,
 )
 
-SIGN_SUBSCRIBE_TASK_NAME = "订阅卡丘Fanbook签到"
 _LOG_TAG = "[卡拉彼丘·Fanbook签到]"
 _BEIJING_TZ = timezone(timedelta(hours=8))
 _DEFAULT_SIGN_HOUR = 0

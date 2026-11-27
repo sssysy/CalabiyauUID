@@ -11,6 +11,7 @@ from gsuid_core.subscribe import gs_subscribe
 from gsuid_core.utils.database.models import Subscribe
 
 DEFAULT_SEND_INTERVAL_SECONDS = 1.5
+SIGN_SUBSCRIBE_TASK_NAME = "订阅卡丘Fanbook签到"
 
 
 def subscribe_scope_key(ev: Event) -> str:

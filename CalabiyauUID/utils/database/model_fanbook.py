@@ -4,7 +4,7 @@ import time
 from typing import TypeVar
 
 from sqlmodel import Field, col, select
-from sqlalchemy import UniqueConstraint, delete
+from sqlalchemy import UniqueConstraint, func, delete, select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gsuid_core.webconsole.mount_app import PageSchema, GsAdminModel, site
@@ -30,6 +30,15 @@ class CalabiyauFanbookUser(BaseBotIDModel, table=True):
     device_id: str = Field(default="", title="设备ID")
     expire_at_ts: int = Field(default=0, title="令牌过期时间戳")
     updated_at_ts: int = Field(default=0, title="最后更新时间戳")
+
+    @classmethod
+    @with_read_session
+    async def count_all(
+        cls: type[T_CalabiyauFanbookUser],
+        session: AsyncSession,
+    ) -> int:
+        result = await session.execute(sa_select(func.count()).select_from(cls))
+        return int(result.scalar_one())
 
     @classmethod
     @with_read_session

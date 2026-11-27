@@ -4,7 +4,7 @@ from typing import Literal, TypeVar
 from dataclasses import dataclass
 
 from sqlmodel import Field, col, select
-from sqlalchemy import Table, MetaData, UniqueConstraint, text, delete, select as sa_select, update, inspect
+from sqlalchemy import Table, MetaData, UniqueConstraint, func, text, delete, select as sa_select, update, inspect
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,15 @@ class CalabiyauBind(BaseBotIDModel, table=True):
     user_id: str = Field(default="", index=True, title="用户ID")
     game_uid: str = Field(default="", index=True, title="卡拉彼丘UID")
     is_main: bool = Field(default=False, title="是否当前账号")
+
+    @classmethod
+    @with_read_session
+    async def count_all(
+        cls: type[T_CalabiyauBind],
+        session: AsyncSession,
+    ) -> int:
+        result = await session.execute(sa_select(func.count()).select_from(cls))
+        return int(result.scalar_one())
 
     @classmethod
     @with_read_session
