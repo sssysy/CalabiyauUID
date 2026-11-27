@@ -31,8 +31,8 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "png",
     ),
     "FanbookLoginUrl": GsStrConfig(
-        "卡丘 Fanbook 登录页面URL",
-        "登录页对外访问地址，留空自动探测",
+        "卡丘 Fanbook 登录页面 URL",
+        "登录页对外访问地址，留空关闭网页登录",
         "",
     ),
     "FanbookSignDaily": GsBoolConfig(

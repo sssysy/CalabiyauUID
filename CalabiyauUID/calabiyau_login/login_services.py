@@ -11,11 +11,8 @@ from datetime import datetime, timedelta
 from collections import OrderedDict
 from dataclasses import dataclass
 
-import httpx
-
 from gsuid_core.aps import scheduler
 from gsuid_core.bot import Bot
-from gsuid_core.config import core_config
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
@@ -41,9 +38,6 @@ _STARTUP_REFRESH_JOB_ID = "klbq_fanbook_token_refresh_startup"
 _STARTUP_REFRESH_DELAY = timedelta(seconds=30)
 _AUTH_EXPIRED_CODES = frozenset({1042, 1043})
 
-_cached_public_ip: str = ""
-_cached_public_ip_expire_at: float = 0.0
-_PUBLIC_IP_TTL_S = 86400.0
 _refresh_lock = asyncio.Lock()
 
 
@@ -121,53 +115,14 @@ def _get_str_config(key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-async def _get_public_ip(fallback_host: str) -> str:
-    global _cached_public_ip, _cached_public_ip_expire_at
-    now = time.monotonic()
-    if _cached_public_ip and now < _cached_public_ip_expire_at:
-        return _cached_public_ip
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(4.0)) as client:
-        try:
-            resp = await client.get("https://api.ipify.org/?format=json")
-            payload: object = resp.json()
-            if isinstance(payload, dict) and "ip" in payload and isinstance(payload["ip"], str):
-                ip_addr = payload["ip"].strip()
-                if ip_addr:
-                    _cached_public_ip = ip_addr
-                    _cached_public_ip_expire_at = now + _PUBLIC_IP_TTL_S
-                    return ip_addr
-        except (httpx.HTTPError, ValueError):
-            pass
-
-        try:
-            resp = await client.get("https://httpbin.org/ip")
-            payload_alt: object = resp.json()
-            if isinstance(payload_alt, dict) and "origin" in payload_alt and isinstance(payload_alt["origin"], str):
-                ip_addr = payload_alt["origin"].split(",")[0].strip()
-                if ip_addr:
-                    _cached_public_ip = ip_addr
-                    _cached_public_ip_expire_at = now + _PUBLIC_IP_TTL_S
-                    return ip_addr
-        except (httpx.HTTPError, ValueError):
-            pass
-
-    return fallback_host
-
-
-async def get_login_base_url() -> str:
+def get_login_base_url() -> str | None:
     configured = _get_str_config("FanbookLoginUrl")
-    if configured:
-        normalized = configured if configured.startswith(("http://", "https://")) else f"https://{configured}"
-        return normalized.rstrip("/")
-
-    raw_host: object = core_config.get_config("HOST")
-    raw_port: object = core_config.get_config("PORT")
-    host = raw_host.strip() if isinstance(raw_host, str) and raw_host.strip() else "127.0.0.1"
-    port = str(raw_port).strip() if raw_port is not None else "8765"
-    if host in {"localhost", "127.0.0.1", "0.0.0.0"}:
-        host = await _get_public_ip(host)
-    return f"http://{host}:{port}"
+    if not configured:
+        return None
+    normalized = configured if configured.startswith(("http://", "https://")) else f"https://{configured}"
+    if not normalized.removeprefix("https://").removeprefix("http://").strip("/"):
+        return None
+    return normalized.rstrip("/")
 
 
 async def _send_text(bot: Bot, ev: Event, message: str) -> None:
@@ -279,6 +234,12 @@ async def _wait_for_login(
 
 async def request_fanbook_login(bot: Bot, ev: Event) -> None:
     """发起 Fanbook 网页滑块短信登录流程并等待完成。"""
+    base_url = get_login_base_url()
+    if base_url is None:
+        logger.info(f"{_LOG_TAG} 未配置 FanbookLoginUrl，拒绝发起网页登录 user_id={ev.user_id}")
+        await _send_text(bot, ev, "未开启网页登录，请联系管理员在控制台配置「卡丘 Fanbook 登录页面URL」。")
+        return
+
     LOGIN_CACHE.evict_user(ev.bot_id, ev.user_id)
     ttl_seconds = _DEFAULT_LOGIN_TTL_S
     auth_token = secrets.token_urlsafe(16)
@@ -292,7 +253,6 @@ async def request_fanbook_login(bot: Bot, ev: Event) -> None:
     )
     LOGIN_CACHE.set(auth_token, state, ttl_seconds)
 
-    base_url = await get_login_base_url()
     login_url = f"{base_url}/kq/fanbook/i/{auth_token}"
     logger.info(f"{_LOG_TAG} 生成登录链接 user_id={ev.user_id} ttl={ttl_seconds}s")
     await _send_login_prompt(bot, ev, login_url, ttl_seconds)
